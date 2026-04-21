@@ -1,0 +1,10 @@
+name = "PBN"
+version = "0.1.0"
+defaultTargets = ["pbn"]
+
+[[lean_lib]]
+name = "PBN"
+
+[[lean_exe]]
+name = "pbn"
+root = "Main"
