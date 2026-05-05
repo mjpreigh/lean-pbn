@@ -147,10 +147,9 @@ elab "navbottomup" : tactic => do
 
 def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM (List MVarId) := do
   let g ← getMainGoal
-  logInfo m!"goal: {g}"
   let lctx ← getLCtx
   let name := lctx.getUnusedName `h
-  let g ← g.assert name toHave mvar
+  let mut g ← g.assert name toHave mvar
   let (_, g') ← g.intro h.getId
   return [g']
 
@@ -160,15 +159,58 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM (List MVarId) :=
 -- throughout all contexts
 elab "navhave" h:ident t:term : tactic => do
   let e ← elabTerm t none
-  let mvar ← mkFreshExprMVar (e)
+  let mut mvar ← mkFreshExprMVar (e)
   let goals ← getGoals
   let mut new_goals : List MVarId := []
   for goal in goals do
+    logInfo m!"here: {goal}"
     let get_goal ← goal.withContext do
       navHave e h mvar
     new_goals := new_goals ++ get_goal
   new_goals := new_goals ++ [mvar.mvarId!]
   replaceMainGoal new_goals
+
+elab "navprune" h:ident t:term : tactic => do
+  let e ← elabTerm t none
+  let mut new_goals2 : List MVarId := []
+  let mut goals ← getGoals
+  for goal in goals do
+    --logInfo m!"goal {repr goal}"
+  --  logInfo m!"goal: {← Lean.Meta.ppGoal goal}"
+    --let goal := goals[0]!
+    let mvarId ← goal.withContext do
+      let lctx ← getLCtx
+      let mainTarget ← goal.getType
+      let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+      let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+      let graph ← toGraph tree emptyGraph []
+      let fmt ← ppExpr e
+      --logInfo m!"repr {h.getId.toString}"
+
+      let mut m := goal
+      let hyp_delete : List String ← pruneDescendants graph fmt.pretty h.getId.toString []
+      logInfo m!"goal: {mainTarget}"
+      logInfo m!"delete {hyp_delete}"
+   --   for hyp in hyp_delete do
+
+     --   if lctx.find? hyp |>.isSome then
+    ----      m ← m.tryClear hyp
+    --      logInfo m!"yes repr {repr hyp}"
+   --   pure m
+
+   -- new_goals2 := [mvarId] ++ new_goals2
+
+
+  --replaceMainGoal new_goals2
+
+
+--  let goals ← getGoals
+--  for goal in goals do
+--    logInfo m!"goal: {repr goal}"
+
+
+
+
 
   -- for each context
     -- build and-or graph

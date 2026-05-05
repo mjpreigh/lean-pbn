@@ -78,29 +78,31 @@ def testinggggg (a b c d f : Prop) (hb : b) (hc : c) (bca : b → c → a) (cda 
     sorry
 
 theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (h : e → x → z → b) (i : z → y → b)
--- (he : e) (hx : x) (hy : y) (hz : z)
+ (he : e) (hx : x) (hy : y) (hz : z)
 :
     a :=
   by
+    navhave m b
+    navprune m b
     --navigate
-    have hx: x := sorry
-    have h' he hz := h he hx hz
+    --have hx: x := sorry
+   -- have h' he hz := h he hx hz
 
-    have he: e := sorry
-    have h' := h he
+   -- have he: e := sorry
+    --have h' := h he
 
-    all_goals have hb: b := ?b
-    all_goals have hx: x := sorry
-    all_goals have hz: z := sorry
-    case b => grind
+   -- all_goals have hb: b := ?b
+   -- all_goals have hx: x := sorry
+   -- all_goals have hz: z := sorry
+    --case b => grind
 
       -- apply h <;> trivial
 
 
 
 
-    printANDOR
-    navbottomup
+    --printANDOR
+    --navbottomup
     sorry
 
 theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (k : e → x → z → b) (i : z → y → b) (he : e) (ea : e → a) (hy : y):
@@ -113,6 +115,7 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) 
     have j : y := ?b
 
     navhave h e
+    navprune h e
     . apply ea
       exact h
     . exact hy
