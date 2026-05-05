@@ -1,3 +1,5 @@
+-- infrastructure to build and manipulate AND-OR structures (trees and graphs)
+
 import Lean
 import Std.Data.HashMap
 
@@ -7,8 +9,6 @@ open Lean Elab Tactic Meta
 
 set_option autoImplicit false
 set_option tactic.hygienic false
-
--- tools that will add things to the local context (look into grind)
 
 inductive Node
   | OR (expr: String) (children : List String) (parents : List String)
@@ -22,6 +22,7 @@ structure ANDORGraph where
   root : String
   edges : List Edge
   nodeMap : HashMap String Node
+  andMap : HashMap String String -- map rule exp to name
 
 inductive AndORNodeType
   | ROOT
@@ -38,6 +39,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
   let mut nodeMap := graph_in.nodeMap
   let mut root := graph_in.root
   let mut parent := parent_in
+  let mut andMap := graph_in.andMap
 
   match tree with
   | AndOrStructure.root v children => do
@@ -52,25 +54,27 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     for child in children do
 
       match child with
-      | AndOrStructure.and v c =>
+      | AndOrStructure.and v _ =>
         let child_string := s!"{v.userName}"
         let edge : Edge := { parent := string_rep, child := child_string}
         node_children := child_string :: node_children
         edges := edge :: edges
-        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root}
+        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
         let new_graph ← toGraph child graph_arg [string_rep]
         edges := new_graph.edges
         nodeMap := new_graph.nodeMap
+        andMap := new_graph.andMap
 
       | AndOrStructure.leaf v =>
         let child_string := s!"{v.userName}"
         let edge : Edge := { parent := string_rep, child := child_string }
         edges := edge :: edges
         node_children := child_string :: node_children
-        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root}
+        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
         let new_graph ← toGraph child graph_arg [string_rep]
         edges := new_graph.edges
         nodeMap := new_graph.nodeMap
+        andMap := new_graph.andMap
 
       | _ => continue
 
@@ -78,13 +82,13 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR e c p => parent := p ++ parent
-    | Node.AND e c p x=> parent := p ++ parent
+    | Node.OR _ _ p => parent := p ++ parent
+    | Node.AND _ _ p _ => parent := p ++ parent
     | _ => parent := parent
 
     let node := Node.OR string_rep node_children parent
     nodeMap := nodeMap.insert string_rep node
-    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := string_rep}
+    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := string_rep, andMap := andMap}
     return ret_graph
 
   | AndOrStructure.or v children => do
@@ -96,25 +100,27 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     -- add edges to children
     for child in children do
       match child with
-      | AndOrStructure.and v c =>
+      | AndOrStructure.and v _ =>
         let child_string := s!"{v.userName}"
         let edge : Edge := { parent := string_rep, child := child_string }
         edges := edge :: edges
         node_children := child_string :: node_children
-        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root}
+        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
         let new_graph ← toGraph child graph_arg [string_rep]
         edges := new_graph.edges
         nodeMap := new_graph.nodeMap
+        andMap := new_graph.andMap
 
       | AndOrStructure.leaf v =>
         let child_string := s!"{v.userName}"
         let edge : Edge := { parent := string_rep, child := child_string }
         edges := edge :: edges
         node_children := child_string :: node_children
-        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root}
+        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
         let new_graph ← toGraph child graph_arg [string_rep]
         edges := new_graph.edges
         nodeMap := new_graph.nodeMap
+        andMap := new_graph.andMap
 
       | _ => continue
 
@@ -122,20 +128,27 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR e c p => parent := p ++ parent
-    | Node.AND e c p x => parent := p ++ parent
+    | Node.OR _ _ p => parent := p ++ parent
+    | Node.AND _ _ p _ => parent := p ++ parent
     | _ => parent := parent
 
     -- make node
     let node := Node.OR string_rep node_children parent
     nodeMap := nodeMap.insert string_rep node
-    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root }
+    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
     return ret_graph
 
   | AndOrStructure.and v children => do
     -- make node
     let ld ← inferType v.toExpr
     let string_rep := s!"{v.userName}"
+
+    let ldfmt ← PrettyPrinter.ppExpr ld
+    let ldString := ldfmt.pretty
+
+    andMap := andMap.insert ldString string_rep
+
+    --logInfo m!"andMap: {m!"{ld}"}, {string_rep}"
 
     let mut node_children : List String := []
     -- add edges to children
@@ -148,10 +161,11 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
         let edge : Edge := { parent := string_rep, child := child_string }
         edges := edge :: edges
         node_children := child_string :: node_children
-        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root}
+        let graph_arg : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
         let new_graph ← toGraph child graph_arg [string_rep]
         edges := new_graph.edges
         nodeMap := new_graph.nodeMap
+        andMap := new_graph.andMap
 
       | _ => continue
 
@@ -159,14 +173,14 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR e c p => parent := p ++ parent
-    | Node.AND e c p x => parent := p ++ parent
+    | Node.OR _ _ p => parent := p ++ parent
+    | Node.AND _ _ p _ => parent := p ++ parent
     | _ => parent := parent
 
 
     let node := Node.AND string_rep node_children parent ld
     nodeMap := nodeMap.insert string_rep node
-    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root }
+    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
     return ret_graph
 
   | AndOrStructure.leaf v => do
@@ -174,19 +188,25 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let ld ← inferType v.toExpr
     let string_rep := s!"{v.userName}"
 
+    let ldfmt ← PrettyPrinter.ppExpr ld
+    let ldString := ldfmt.pretty
+
+    andMap := andMap.insert ldString string_rep
+    --logInfo m!"andMap: {m!"{ld}"}, {string_rep}"
+
     -- replace node but with more parents if already exists
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR e c p => parent := p ++ parent
-    | Node.AND e c p x => parent := p ++ parent
+    | Node.OR _ _ p => parent := p ++ parent
+    | Node.AND _ _ p _ => parent := p ++ parent
     | _ => parent := parent
 
 
     let node := Node.AND string_rep [] parent ld
     nodeMap := nodeMap.insert string_rep node
 
-    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root }
+    let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
     return ret_graph
 
 partial def traverse_graph (graph : ANDORGraph) (node_string : String) (seen_in : List String) : TacticM Unit := do
@@ -204,7 +224,7 @@ partial def traverse_graph (graph : ANDORGraph) (node_string : String) (seen_in 
     logInfo m!"OR: {rep}, children: {children}, parents : {p}"
     for child in children do
       traverse_graph graph child seen
-  | Node.AND rep children p x =>
+  | Node.AND rep children p _ =>
     logInfo m!"AND: {rep}, children: {children}, parents : {p}"
     for child in children do
       traverse_graph graph child seen
@@ -232,10 +252,27 @@ def PrintSubtree (graph: AndOrStructure LocalDecl): TacticM Unit := do
     let type ← inferType v.toExpr
     logInfo m!"Leaf: {name} : {type}"
 
-def getArgs (e : Expr) : MetaM (List String) := do
+def getArgs (e : Expr) (andMap : HashMap String String) : MetaM (List String) := do
   let mut exp := e
-  let fmt ← PrettyPrinter.ppExpr exp
-  let string_rep := fmt.pretty
+  let mut args := []
+  while true do
+    exp ← whnf exp
+    match exp with
+    | Expr.forallE _ first body _ =>
+        let fmt ← PrettyPrinter.ppExpr first
+        let string_rep := fmt.pretty
+        let possibleRule := andMap.contains string_rep
+        if possibleRule then
+          let a := andMap.get! string_rep
+          args := [a] ++ args
+        else
+          args := [string_rep] ++ args
+        exp := body
+    | _ => break
+  return args
+
+def getArgsRaw (e : Expr) : MetaM (List String) := do
+  let mut exp := e
   let mut args := []
   while true do
     exp ← whnf exp
@@ -322,215 +359,44 @@ partial def buildAndOrTree (lctx : LocalContext) (goal: Expr) (nodeType: AndORNo
 
 def getNodeExpr (node : AndOrStructure LocalDecl) : MetaM Expr := do
   match node with
-  | AndOrStructure.root v children => return v
-  | AndOrStructure.or v children => return v
-  | AndOrStructure.and v children => return v.toExpr
+  | AndOrStructure.root v _ => return v
+  | AndOrStructure.or v _ => return v
+  | AndOrStructure.and v _ => return v.toExpr
   | AndOrStructure.leaf v => return v.toExpr
 
-def navTopDown (node : AndOrStructure LocalDecl) : TacticM Unit := do
-  match node with
-  | AndOrStructure.root v children =>
-    -- present "apply" for each rule
-    for rule in children do
-      let r ← getNodeExpr rule
-      logInfo m!"apply {r}"
-  | AndOrStructure.or v children => return
-  | AndOrStructure.and v children => return
-  | AndOrStructure.leaf v => return
+def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM ANDORGraph := do
+  let mut edges := []
+  let mut nodeMap := graph_in.nodeMap
+  let root := graph_in.root
+  let mut andMap := graph_in.andMap
 
-  def navAllPossibilities (node : AndOrStructure LocalDecl) : TacticM Unit := do
-  match node with
+  for f in false_set do
+    -- get the goal node
+    let node := nodeMap.get? f
+    match node with
+    | Node.OR _ _ p =>
+      -- remove the goal node
+      nodeMap := nodeMap.erase f
+      -- remove any edges including the goal node
+      -- remove any parents of the goal node
+      for parent in p do
 
-  | AndOrStructure.root v children =>
-    -- present "apply" for each rule
-    for rule in children do
-      let r ← getNodeExpr rule
-      logInfo m!"apply {r}"
-    for rule in children do
-      navAllPossibilities rule
+        -- remove all other children
+        let rule := nodeMap.get? parent
+        match rule with
+        | Node.AND _ c _ _ =>
+          for child in c do
+            nodeMap := nodeMap.erase child
+        | _ => continue
+        -- remove as a child of goals?
+        -- remove from andMap
+        nodeMap := nodeMap.erase parent
+        -- remove from nodeMap
+        andMap := andMap.erase parent
 
-  | AndOrStructure.or v children =>
-    for rule in children do
-      navAllPossibilities rule
-
-  | AndOrStructure.and v children =>
-    let mut args := m!""
-    if children.length > 0 then
-      for or in children do
-        let o ← getNodeExpr or
-        args := args ++ m!" {o}"
-      logInfo m!"have _ := {v.userName}{args}"
-
-    for or in children do
-      navAllPossibilities or
-
-  | AndOrStructure.leaf v => return
-
-def printAndOr : TacticM Unit :=
-  withMainContext do
-    let lctx ← getLCtx
-    let mainTarget ← getMainTarget
-    let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
-
-    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := ""}
-    let graph ← toGraph tree emptyGraph []
-
-    traverse_graph graph graph.root []
-
-elab "printANDOR" : tactic => do
-   printAndOr
-
--- for now get offered all possible applications
-def Navigate : TacticM Unit :=
-  withMainContext do
-    let lctx ← getLCtx
-    let mainTarget ← getMainTarget
-    let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
-    --navTopDown tree
-    navAllPossibilities tree
-
-elab "navigate" : tactic => do
-  Navigate
-
-def navBottomUp : TacticM Unit :=
-  withMainContext do
-    let lctx ← getLCtx
-    let mainTarget ← getMainTarget
-    let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
-    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := ""}
-    let graph ← toGraph tree emptyGraph []
-
-    -- rule map : rule (string version) -> are all args axiomotized?
-    let mut ruleMap : HashMap String Bool := {}
-    let mut argMap : HashMap String Bool := {}
-    let mut trueGoals : List String := []
-    let mut falseGoals : List String := []
-    -- for all nodes
-    for (str, node) in graph.nodeMap do
-      match node with
-      | Node.AND s c p x =>
-        -- if it is a leaf
-        if List.length c == 0 then
-          -- if it is AND, record which goal is true and which rule that goal is a child of
-            for goal in p do
-              trueGoals := goal :: trueGoals
-              argMap := argMap.insert goal true
-              let goalnode := graph.nodeMap.get? goal
-              match goalnode with
-              | Node.AND s2 c2 p2 x2 =>
-                for rule in p do
-                  -- if rule in rule map, do nothing
-                  -- if rule not in rule map, add rule -> true
-                  if !ruleMap.contains rule then
-                    ruleMap := ruleMap.insert rule true
-              | _ => let x := 1
-
-      | Node.OR s c p =>
-        -- if it is a leaf
-        if List.length c == 0 then
-          -- if it is an OR, record which goal is not true and which rule it is a child of
-          falseGoals := s :: falseGoals
-          argMap := argMap.insert s false
-          for rule in p do
-            -- add rule -> false to rule map no matter what
-            ruleMap := ruleMap.insert rule false
-
-    -- for rule in rule map, if true, offer to "have". If false offer "provide" for all non-axiomotized arguments
-    for (rule, b) in ruleMap do
-      logInfo m!"rule {rule}"
-      let ruleNode := graph.nodeMap.get? rule
-      match ruleNode with
-      | Node.AND s c p x =>
-        let mut args ← getArgs x
-        match b with
-        | true =>
-          logInfo m!"t"
-          args := List.reverse args
-          logInfo m!"have {args}"
-        | false =>
-          logInfo m!"f"
-          for arg in args do
-          let arg_status := argMap.get? arg
-          match arg_status with
-          | true => continue
-          | false => logInfo m!"provide {arg}"
-          | _ => logInfo m!"provide {arg}"
-      | _ => continue
+      -- remove the goal node as a parent of any children
+    | _ => continue
 
 
-elab "navbottomup" : tactic => do
-  navBottomUp
-
-theorem a_proof_of_negation (a : Prop) :
-    a → ¬¬ a :=
-  by
-    rw [Not]
-    rw [Not]
-    intro ha
-    intro hna
-    apply hna
-    exact ha
-
-theorem a_proof_of_negation2 (a : Prop) :
-    a → ¬¬ a :=
-  by
-    rw [Not]
-    rw [Not]
-    intro ha
-    intro hna
-    sorry
-    --navigate
-
-  theorem test (a b c d m : Prop) (f : a → b) (h : c → d) (i : b → d) (j: m → d) (k : a → b → c) (M : b → a) (bb : b):
-    (b → c) :=
-  by
-    --navigate
-    printANDOR
-    sorry
-
-  def test2 (a : Prop) (b : Prop) (c : Prop) (d : Prop) (m : Prop) (f : Int → String) (f2 : Int → String)  (g : a → Int) (h : c → d) (i : b → d) (j: m → d) (k : a → b → c) (bb : b):
-    (a → String) :=
-  by
-    intro ha
-    apply f
-    have x := i ?bbbb
-    sorry
-    --navigate
-
-  theorem testingg (c d e : Prop) (g : d → e → c) (hd : d) (he : e) :
-    c :=
-  by
-    have x := g hd he
-    --navigate
-    sorry
-
-  theorem testinggg (a b c d e : Prop) (g : a → b → d → e → c) (hd : d) (he : e) :
-    e → c :=
-  by
-    --navigate
-    sorry
-
-  theorem testingggg (a b c : Prop) (ab : a → b) (bc : b → c):
-    a → c :=
-  by
-    intro ha
-    --have x := ab ha
-    --navigate
-    sorry
-
-def testinggggg (a b c d f : Prop) (hb : b) (hc : c) (bca : b → c → a) (cda : c → d → a):
-    a :=
-  by
-    navigate
-    printANDOR
-    navbottomup
-    --have x := bca hb
-    sorry
-
-  theorem testd (a b c d m : Prop) (f : a → b) (k : a → b → c) :
-    c :=
-  by
-    navigate
-    printANDOR
-    navbottomup
-    sorry
+  let graph_out : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
+  return graph_out
