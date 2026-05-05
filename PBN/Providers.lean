@@ -218,7 +218,9 @@ elab "navprune" h:ident t:term : tactic => do
 
 elab "navhave" h:ident t:term : tactic => do
   let e ← elabTerm t none
-  let mut mvar ← mkFreshExprMVar (e)
+  let main ← getMainGoal
+  let mvar ← main.withContext do
+    mkFreshExprMVar (e)
   let goals ← getGoals
   let mut new_goals : List MVarId := []
   for goal in goals do
@@ -241,7 +243,7 @@ elab "navhave" h:ident t:term : tactic => do
       let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
       let graph ← toGraph tree emptyGraph []
       let fmt ← ppExpr e
-      pruneDescendants graph fmt.pretty h.getId.toString []
+      pruneDescendantsAndProven graph fmt.pretty h.getId.toString []
     hyp_delete := hyp_delete ++ hyp_delete1
 
   for goal in goals do
@@ -249,11 +251,13 @@ elab "navhave" h:ident t:term : tactic => do
       continue
     let mvar2 ← goal.withContext do
       let mut m := goal
+
       for hyp in hyp_delete do
         m ← m.tryClear hyp
       pure m
 
-    new_goals2 := [mvar2] ++ new_goals2
+    new_goals2 := new_goals2 ++ [mvar2]
+  logInfo m!"goals2 : {new_goals2}"
   replaceMainGoal new_goals2
 
 
@@ -273,3 +277,17 @@ elab "navhave" h:ident t:term : tactic => do
 
 
 -- next- essential things, order
+
+--With navhave you always have to provide the node in *some way*
+-- tell the story of some example in both ao-nav and this tool
+-- intermediate steps, not just proofs done by tactics
+-- "play" a strategy
+-- re-play what ao-nav did
+-- implement some strategy
+-- strategies are modular
+-- how does pruning relate to strong soundness and completeness in report
+
+-- context names
+-- finish the newly proved part of navhave
+-- false labels -> but actually means unprovable
+-- some sort of navigation strategies (random, all, essential etc)

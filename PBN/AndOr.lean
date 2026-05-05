@@ -403,6 +403,7 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
   let graph_out : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
   return graph_out
 
+-- returns list of hypotheses to delete below the given top_node
 partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
   logInfo m!"ax : {ax}"
   let nodeMap := graph.nodeMap
@@ -439,3 +440,13 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
     return delete
 
   | none => return []
+
+-- returns list of hypotheses to delete based on what having top_node makes provable
+def pruneProven (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
+  return []
+
+partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
+  let l1 ← pruneDescendants graph top_node ax seen_in
+  let l2 ← pruneProven graph top_node ax seen_in
+  let ret := l1 ++ l2
+  return ret

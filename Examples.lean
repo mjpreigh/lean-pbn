@@ -105,19 +105,28 @@ theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (
     --navbottomup
     sorry
 
-theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (k : e → x → z → b) (i : z → y → b) (he : e) (ea : e → a) (hy : y):
+theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (k : e → x → z → b) (i : z → y → b):
     a :=
   by
 
-    navigate
-    printANDOR
-    navbottomup
-    have j : y := ?b
 
-    navhave h e
-    . exact hy
-    . apply ea h
-    . exact he
+    navhave hy:y, !x
+
+    have nx: ¬ x := sorry
+
+
+
+    navhave hz z
+    .sorry
+    . sorry
+    . sorry
+    navhave -maxinfogain
+
+
+    --navhave h b
+   -- . exact hy
+   -- . apply ea h
+   -- . exact he
 
     --navprune h e
 
