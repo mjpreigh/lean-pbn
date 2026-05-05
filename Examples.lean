@@ -82,8 +82,8 @@ theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (
 :
     a :=
   by
-    navhave m b
-    navprune m b
+    --navhave m b
+    --navprune m b
     --navigate
     --have hx: x := sorry
    -- have h' he hz := h he hx hz
@@ -115,8 +115,17 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) 
     have j : y := ?b
 
     navhave h e
-    navprune h e
-    . apply ea
-      exact h
     . exact hy
+    . apply ea h
     . exact he
+
+    --navprune h e
+
+    --navprune e he
+
+    --navhave h e
+    --navprune h e
+    --. apply ea
+     -- exact h
+    --. exact hy
+    --. exact he

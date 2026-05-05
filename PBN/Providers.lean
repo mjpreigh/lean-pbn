@@ -91,7 +91,7 @@ def NavBottomUp : TacticM Unit :=
     -- for all nodes
     for (_, node) in graph.nodeMap do
       match node with
-      | Node.AND _ c p _ =>
+      | Node.AND _ c p _ _ =>
         -- if it is a leaf
         if List.length c == 0 then
 
@@ -121,7 +121,7 @@ def NavBottomUp : TacticM Unit :=
     for (rule, b) in ruleMap do
       let ruleNode := graph.nodeMap.get? rule
       match ruleNode with
-      | Node.AND s _ _ x =>
+      | Node.AND s _ _ x _ =>
         --logInfo m!"getargs and map: "
        -- for (a, b) in graph.andMap do
          -- logInfo m!"{a}, {b}"
@@ -157,56 +157,105 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM (List MVarId) :=
 -- new goal
 -- residual context/residual graph
 -- throughout all contexts
-elab "navhave" h:ident t:term : tactic => do
+elab "navhavehalf" h:ident t:term : tactic => do
   let e ← elabTerm t none
   let mut mvar ← mkFreshExprMVar (e)
   let goals ← getGoals
   let mut new_goals : List MVarId := []
   for goal in goals do
-    logInfo m!"here: {goal}"
     let get_goal ← goal.withContext do
       navHave e h mvar
     new_goals := new_goals ++ get_goal
   new_goals := new_goals ++ [mvar.mvarId!]
   replaceMainGoal new_goals
 
+macro "pruneTestMacro" h:ident : tactic => do
+  `(tactic|(clear $h))
+
+elab "pruneTest" h:ident t:term : tactic => do
+  let e ← elabTerm t none
+  let fmt ← ppExpr e
+  let mut goal ← getMainGoal
+  let mainTarget ← goal.getType
+  let lctx ← getLCtx
+  let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+  let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+  let graph ← toGraph tree emptyGraph []
+  let hyp_delete : List FVarId ← pruneDescendants graph fmt.pretty h.getId.toString []
+  let del := hyp_delete[0]!
+  let goal2 ← goal.tryClear del
+
+  replaceMainGoal [goal2]
+
+
 elab "navprune" h:ident t:term : tactic => do
   let e ← elabTerm t none
   let mut new_goals2 : List MVarId := []
   let mut goals ← getGoals
+
+  let mut hyp_delete : List FVarId := []
   for goal in goals do
-    --logInfo m!"goal {repr goal}"
-  --  logInfo m!"goal: {← Lean.Meta.ppGoal goal}"
-    --let goal := goals[0]!
-    let mvarId ← goal.withContext do
+    let hyp_delete1 ← goal.withContext do
       let lctx ← getLCtx
       let mainTarget ← goal.getType
       let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
       let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
       let graph ← toGraph tree emptyGraph []
       let fmt ← ppExpr e
-      --logInfo m!"repr {h.getId.toString}"
+      pruneDescendants graph fmt.pretty h.getId.toString []
+    hyp_delete := hyp_delete ++ hyp_delete1
 
+  for goal in goals do
+    let mvar ← goal.withContext do
       let mut m := goal
-      let hyp_delete : List String ← pruneDescendants graph fmt.pretty h.getId.toString []
-      logInfo m!"goal: {mainTarget}"
-      logInfo m!"delete {hyp_delete}"
-   --   for hyp in hyp_delete do
+      for hyp in hyp_delete do
+        m ← m.tryClear hyp
+      pure m
 
-     --   if lctx.find? hyp |>.isSome then
-    ----      m ← m.tryClear hyp
-    --      logInfo m!"yes repr {repr hyp}"
-   --   pure m
-
-   -- new_goals2 := [mvarId] ++ new_goals2
+    new_goals2 := [mvar] ++ new_goals2
+  replaceMainGoal new_goals2
 
 
-  --replaceMainGoal new_goals2
+elab "navhave" h:ident t:term : tactic => do
+  let e ← elabTerm t none
+  let mut mvar ← mkFreshExprMVar (e)
+  let goals ← getGoals
+  let mut new_goals : List MVarId := []
+  for goal in goals do
+    let get_goal ← goal.withContext do
+      navHave e h mvar
+    new_goals := new_goals ++ get_goal
+  new_goals := new_goals ++ [mvar.mvarId!]
+  replaceMainGoal new_goals
 
 
---  let goals ← getGoals
---  for goal in goals do
---    logInfo m!"goal: {repr goal}"
+  let mut new_goals2 : List MVarId := []
+  let mut goals ← getGoals
+
+  let mut hyp_delete : List FVarId := []
+  for goal in goals do
+    let hyp_delete1 ← goal.withContext do
+      let lctx ← getLCtx
+      let mainTarget ← goal.getType
+      let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+      let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+      let graph ← toGraph tree emptyGraph []
+      let fmt ← ppExpr e
+      pruneDescendants graph fmt.pretty h.getId.toString []
+    hyp_delete := hyp_delete ++ hyp_delete1
+
+  for goal in goals do
+    if goal == mvar.mvarId! then
+      continue
+    let mvar2 ← goal.withContext do
+      let mut m := goal
+      for hyp in hyp_delete do
+        m ← m.tryClear hyp
+      pure m
+
+    new_goals2 := [mvar2] ++ new_goals2
+  replaceMainGoal new_goals2
+
 
 
 

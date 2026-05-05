@@ -12,7 +12,7 @@ set_option tactic.hygienic false
 
 inductive Node
   | OR (expr: String) (children : List String) (parents : List String)
-  | AND (name: String) (children : List String) (parents : List String) (expression : Expr)
+  | AND (name: String) (children : List String) (parents : List String) (expression : Expr) (fvar : FVarId)
 
 structure Edge where
   parent : String
@@ -83,7 +83,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
 
     match node_maybe with
     | Node.OR _ _ p => parent := p ++ parent
-    | Node.AND _ _ p _ => parent := p ++ parent
+    | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
     let node := Node.OR string_rep node_children parent
@@ -129,7 +129,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
 
     match node_maybe with
     | Node.OR _ _ p => parent := p ++ parent
-    | Node.AND _ _ p _ => parent := p ++ parent
+    | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
     -- make node
@@ -142,6 +142,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     -- make node
     let ld ← inferType v.toExpr
     let string_rep := s!"{v.userName}"
+    let fvar := v.fvarId
 
     let ldfmt ← PrettyPrinter.ppExpr ld
     let ldString := ldfmt.pretty
@@ -174,11 +175,11 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
 
     match node_maybe with
     | Node.OR _ _ p => parent := p ++ parent
-    | Node.AND _ _ p _ => parent := p ++ parent
+    | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
 
-    let node := Node.AND string_rep node_children parent ld
+    let node := Node.AND string_rep node_children parent ld fvar
     nodeMap := nodeMap.insert string_rep node
     let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
     return ret_graph
@@ -187,6 +188,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     -- make node
     let ld ← inferType v.toExpr
     let string_rep := s!"{v.userName}"
+    let fvar := v.fvarId
 
     let ldfmt ← PrettyPrinter.ppExpr ld
     let ldString := ldfmt.pretty
@@ -199,11 +201,11 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
 
     match node_maybe with
     | Node.OR _ _ p => parent := p ++ parent
-    | Node.AND _ _ p _ => parent := p ++ parent
+    | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
 
-    let node := Node.AND string_rep [] parent ld
+    let node := Node.AND string_rep [] parent ld fvar
     nodeMap := nodeMap.insert string_rep node
 
     let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
@@ -224,7 +226,7 @@ partial def traverse_graph (graph : ANDORGraph) (node_string : String) (seen_in 
     logInfo m!"OR: {rep}, children: {children}, parents : {p}"
     for child in children do
       traverse_graph graph child seen
-  | Node.AND rep children p _ =>
+  | Node.AND rep children p _ _ =>
     logInfo m!"AND: {rep}, children: {children}, parents : {p}"
     for child in children do
       traverse_graph graph child seen
@@ -384,7 +386,7 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
         -- remove all other children
         let rule := nodeMap.get? parent
         match rule with
-        | Node.AND _ c _ _ =>
+        | Node.AND _ c _ _ _ =>
           for child in c do
             nodeMap := nodeMap.erase child
         | _ => continue
@@ -401,11 +403,12 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
   let graph_out : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
   return graph_out
 
-partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List String) := do
+partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
+  logInfo m!"ax : {ax}"
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? top_node
   let mut seen := seen_in
-  let mut delete : List String := []
+  let mut delete : List FVarId := []
 
   match node with
 
@@ -417,7 +420,7 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
       delete := delete ++ delete_intermediate
     return delete
 
-  | Node.AND n c p e =>
+  | Node.AND n c p _ f =>
     seen := n :: seen
 
     -- unless node has a parent that is not in seen (or it is ax), add to delete
@@ -427,7 +430,7 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
         to_delete := false
         break
     if to_delete && !(n == ax) then
-      delete := n :: delete
+      delete := f :: delete
 
     -- visit children
     for child in c do
