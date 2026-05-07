@@ -100,7 +100,7 @@ def NavBottomUp : TacticM Unit :=
             argMap := argMap.insert goal true
             let goalnode := graph.nodeMap.get? goal
             match goalnode with
-            | Node.OR _ _ p2 =>
+            | Node.OR _ _ p2 _ =>
               for rule in p2 do
                 -- if rule in rule map, do nothing
                 -- if rule not in rule map, add rule -> true
@@ -108,7 +108,7 @@ def NavBottomUp : TacticM Unit :=
                   ruleMap := ruleMap.insert rule true
             | _ => continue
 
-      | Node.OR s c p =>
+      | Node.OR s c p _ =>
         -- if it is a leaf
         if List.length c == 0 then
           -- if it is an OR, record which goal is not true and which rule it is a child of
@@ -265,9 +265,16 @@ elab "navhave" h:ident t:term : tactic => do
         let graph ← toGraph tree emptyGraph []
         let pretty_new_hyp ← Lean.Meta.ppExpr e
         let pretty_root ← Lean.Meta.ppExpr mainTarget
+        let mut pruneProven ← pruneProvenString graph pretty_root.pretty h.getId.toString []
+        logInfo m!"prune proven : {pruneProven}"
         let mut prune ← pruneDescendants graph pretty_root.pretty h.getId.toString []
+        --let mut pruneStr ← pruneDescendantsString graph pretty_root.pretty h.getId.toString []
         if prune.length == 0 then
           prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
+          --pruneStr ← pruneDescendantsString graph pretty_new_hyp.pretty h.getId.toString []
+        traverse_graph graph graph.root []
+
+        --logInfo m!"goal : {e}, prune : {pruneStr}, len : {prune.length}, len : {pruneStr.length}"
         --let mut get_goal_mvar := new_mvar
 
         let mut m := new_mvar

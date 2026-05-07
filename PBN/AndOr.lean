@@ -11,7 +11,7 @@ set_option autoImplicit false
 set_option tactic.hygienic false
 
 inductive Node
-  | OR (expr: String) (children : List String) (parents : List String)
+  | OR (expr: String) (children : List String) (parents : List String) (fvar : FVarId)
   | AND (name: String) (children : List String) (parents : List String) (expression : Expr) (fvar : FVarId)
 
 structure Edge where
@@ -82,11 +82,11 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR _ _ p => parent := p ++ parent
+    | Node.OR _ _ p _ => parent := p ++ parent
     | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
-    let node := Node.OR string_rep node_children parent
+    let node := Node.OR string_rep node_children parent v.fvarId!
     nodeMap := nodeMap.insert string_rep node
     let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := string_rep, andMap := andMap}
     return ret_graph
@@ -128,12 +128,12 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR _ _ p => parent := p ++ parent
+    | Node.OR _ _ p _ => parent := p ++ parent
     | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
     -- make node
-    let node := Node.OR string_rep node_children parent
+    let node := Node.OR string_rep node_children parent v.fvarId!
     nodeMap := nodeMap.insert string_rep node
     let ret_graph : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap }
     return ret_graph
@@ -174,7 +174,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR _ _ p => parent := p ++ parent
+    | Node.OR _ _ p _ => parent := p ++ parent
     | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
@@ -200,7 +200,7 @@ def toGraph (tree: AndOrStructure LocalDecl) (graph_in : ANDORGraph) (parent_in 
     let node_maybe := nodeMap.get? string_rep
 
     match node_maybe with
-    | Node.OR _ _ p => parent := p ++ parent
+    | Node.OR _ _ p _ => parent := p ++ parent
     | Node.AND _ _ p _ _ => parent := p ++ parent
     | _ => parent := parent
 
@@ -222,7 +222,7 @@ partial def traverse_graph (graph : ANDORGraph) (node_string : String) (seen_in 
   let node : Option Node := nodeMap.get? node_string
 
   match node with
-  | Node.OR rep children p =>
+  | Node.OR rep children p _ =>
     logInfo m!"OR: {rep}, children: {children}, parents : {p}"
     for child in children do
       traverse_graph graph child seen
@@ -376,7 +376,7 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
     -- get the goal node
     let node := nodeMap.get? f
     match node with
-    | Node.OR _ _ p =>
+    | Node.OR _ _ p _ =>
       -- remove the goal node
       nodeMap := nodeMap.erase f
       -- remove any edges including the goal node
@@ -405,7 +405,6 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
 
 -- returns list of hypotheses to delete below the given top_node
 partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
-  logInfo m!"ax : {ax}"
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? top_node
   let mut seen := seen_in
@@ -413,7 +412,7 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
 
   match node with
 
-  | Node.OR e c _ =>
+  | Node.OR e c _ _ =>
     seen := e :: seen
     -- visit children
     for child in c do
@@ -441,9 +440,113 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
 
   | none => return []
 
+def getNodeParents (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ _ p _ => return p
+  | Node.AND _ _ p _ _ => return p
+  | none => return []
+
+def get_node_children (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ c _ _ => return c
+  | Node.AND _ c _ _ _ => return c
+  | none => return []
+
+-- is this or-node proven? For now just if it is axiomotized BUT COME BACK
+def or_proven (graph : ANDORGraph) (node_str : String) : MetaM (Bool) := do
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ c _ _ =>
+    -- if any children are rules with no children, return true else false
+    let mut proven := false
+    for child in c do
+      let childs_children ← get_node_children graph child
+      if childs_children.length == 0 then
+        proven := true
+        break
+
+    return proven
+  | Node.AND _ _ _ _ _ => return false
+
+  | none => return false
+
+def get_node_fvar (graph : ANDORGraph) (node_str : String) : MetaM (List FVarId) :=
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ _ _ f => return [f]
+  | Node.AND _ _ _ _ f => return [f]
+  | none => return []
+
+def get_node_parents (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ _ p _ => return p
+  | Node.AND _ _ p _ _ => return p
+  | none => return []
+
 -- returns list of hypotheses to delete based on what having top_node makes provable
-def pruneProven (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
-  return []
+partial def pruneProven (graph : ANDORGraph) (node_str : String) (original_axiom : String) (seen_in : List String) : MetaM (List FVarId) := do
+  -- start at some OR node
+  -- iterate over all parent AND nodes
+    -- for any AND node that is satisfied, clear all children and the AND node itself, and call pruneProven on the newly proven OR node
+  -- if no parent is satisfied, make sure to axiomatize this OR node
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  let mut delete : List FVarId := []
+
+
+  match node with
+  | Node.OR _ _ p f =>
+    let mut delete_rules_local : List String := []
+    let mut delete_goals_local : List String := []
+
+    let mut any_parent_sat := false
+    for parent in p do
+      let mut all_args_proven := true
+      let parent_args ← getNodeParents graph parent
+      for arg in parent_args do
+        if !(← or_proven graph arg) then
+          all_args_proven := false
+          break
+      if !all_args_proven then
+        continue
+
+      delete_goals_local := delete_goals_local ++ parent_args
+      delete_rules_local := delete_rules_local ++ [parent]
+
+      -- repeat this process on the parent of this rule
+      delete := delete ++ (←pruneProven graph (←getNodeParents graph parent)[0]! original_axiom seen_in)
+
+      any_parent_sat := true
+      -- delete this or node and the sat rule, and call pruneProven on the proven or node
+      let parent_fvar ← get_node_fvar graph parent
+      delete := delete ++ parent_fvar
+
+    -- of all the rules that are going to be deleted, delete any args that only have a subset of those as their parents
+    for arg in delete_goals_local do
+      let mut all_parents_in_delete := true
+      let args_parents ← getNodeParents graph arg
+      for par in args_parents do
+        if !delete_goals_local.contains par then
+          all_parents_in_delete := false
+          break
+      if all_parents_in_delete then
+        delete := delete ++ (←get_node_fvar graph arg)
+
+    -- delete this node
+    delete := delete ++ [f]
+
+
+    return delete
+  | Node.AND n c p _ f => return []
+  | none => return []
 
 partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
   let l1 ← pruneDescendants graph top_node ax seen_in
@@ -451,7 +554,7 @@ partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (
   let ret := l1 ++ l2
   return ret
 
-  partial def pruneDescendantsString (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List String) := do
+partial def pruneDescendantsString (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List String) := do
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? top_node
   let mut seen := seen_in
@@ -459,7 +562,7 @@ partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (
 
   match node with
 
-  | Node.OR e c _ =>
+  | Node.OR e c _ _ =>
     seen := e :: seen
     -- visit children
     for child in c do
@@ -467,7 +570,7 @@ partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (
       delete := delete ++ delete_intermediate
     return delete
 
-  | Node.AND n c p _ f =>
+  | Node.AND n c p _ _ =>
     seen := n :: seen
 
     -- unless node has a parent that is not in seen (or it is ax), add to delete
@@ -486,3 +589,67 @@ partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (
     return delete
 
   | none => return []
+
+
+  partial def pruneProvenString (graph : ANDORGraph) (node_str : String) (original_axiom : String) (seen_in : List String) : MetaM (List String) := do
+  -- start at some OR node
+  -- iterate over all parent AND nodes
+    -- for any AND node that is satisfied, clear all children and the AND node itself, and call pruneProven on the newly proven OR node
+  -- if no parent is satisfied, make sure to axiomatize this OR node
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  let mut delete : List String := []
+
+
+  match node with
+  | Node.OR s _ p f =>
+    let mut delete_rules_local : List String := []
+    let mut delete_goals_local : List String := []
+
+    let mut any_parent_sat := false
+    for parent in p do
+      let mut all_args_proven := true
+      let parent_args ← getNodeParents graph parent
+      for arg in parent_args do
+        if !(← or_proven graph arg) then
+          all_args_proven := false
+          break
+      if !all_args_proven then
+        continue
+
+      delete_goals_local := delete_goals_local ++ parent_args
+      delete_rules_local := delete_rules_local ++ [parent]
+
+      -- repeat this process on the parent of this rule
+      delete := delete ++ (←pruneProvenString graph (←getNodeParents graph parent)[0]! original_axiom seen_in)
+
+      any_parent_sat := true
+      -- delete this or node and the sat rule, and call pruneProven on the proven or node
+      let parent_fvar ← get_node_fvar graph parent
+      delete := delete ++ [parent]
+
+    -- of all the rules that are going to be deleted, delete any args that only have a subset of those as their parents
+    for arg in delete_goals_local do
+      let mut all_parents_in_delete := true
+      let args_parents ← getNodeParents graph arg
+      for par in args_parents do
+        if !delete_goals_local.contains par then
+          all_parents_in_delete := false
+          break
+      if all_parents_in_delete then
+        delete := delete ++ [arg]
+
+    -- delete this node
+    delete := delete ++ [s]
+
+
+    return delete
+  | Node.AND n c p _ f => return []
+  | none => return []
+
+
+partial def pruneDescendantsAndProvenString (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List String) := do
+  let l1 ← pruneDescendantsString graph top_node ax seen_in
+  let l2 ← pruneProvenString graph top_node ax seen_in
+  let ret := l1 ++ l2
+  return ret
