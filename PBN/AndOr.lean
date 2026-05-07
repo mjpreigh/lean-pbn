@@ -450,3 +450,39 @@ partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (
   let l2 ← pruneProven graph top_node ax seen_in
   let ret := l1 ++ l2
   return ret
+
+  partial def pruneDescendantsString (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List String) := do
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? top_node
+  let mut seen := seen_in
+  let mut delete : List String := []
+
+  match node with
+
+  | Node.OR e c _ =>
+    seen := e :: seen
+    -- visit children
+    for child in c do
+      let delete_intermediate ← pruneDescendantsString graph child ax seen
+      delete := delete ++ delete_intermediate
+    return delete
+
+  | Node.AND n c p _ f =>
+    seen := n :: seen
+
+    -- unless node has a parent that is not in seen (or it is ax), add to delete
+    let mut to_delete := true
+    for parent in p do
+      if !seen.contains parent then
+        to_delete := false
+        break
+    if to_delete && !(n == ax) then
+      delete := n :: delete
+
+    -- visit children
+    for child in c do
+      let delete_intermediate ← pruneDescendantsString graph child ax seen
+      delete := delete ++ delete_intermediate
+    return delete
+
+  | none => return []

@@ -110,17 +110,14 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) 
   by
 
 
-    navhave hy:y, !x
-
-    have nx: ¬ x := sorry
-
 
 
     navhave hz z
-    .sorry
-    . sorry
-    . sorry
-    navhave -maxinfogain
+    navhave hx x
+    navhave hd d
+    navhave hc c
+    navhave he e
+    navhave hb b
 
 
     --navhave h b

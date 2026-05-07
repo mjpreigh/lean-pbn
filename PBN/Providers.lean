@@ -145,29 +145,21 @@ def NavBottomUp : TacticM Unit :=
 elab "navbottomup" : tactic => do
   NavBottomUp
 
-def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM (List MVarId) := do
-  let g ← getMainGoal
-  let lctx ← getLCtx
-  let name := lctx.getUnusedName `h
-  let mut g ← g.assert name toHave mvar
-  let (_, g') ← g.intro h.getId
-  return [g']
-
 -- "super have"
 -- new goal
 -- residual context/residual graph
 -- throughout all contexts
-elab "navhavehalf" h:ident t:term : tactic => do
-  let e ← elabTerm t none
-  let mut mvar ← mkFreshExprMVar (e)
-  let goals ← getGoals
-  let mut new_goals : List MVarId := []
-  for goal in goals do
-    let get_goal ← goal.withContext do
-      navHave e h mvar
-    new_goals := new_goals ++ get_goal
-  new_goals := new_goals ++ [mvar.mvarId!]
-  replaceMainGoal new_goals
+--elab "navhavehalf" h:ident t:term : tactic => do
+--  let e ← elabTerm t none
+  --let mut mvar ← mkFreshExprMVar (e)
+--  let goals ← getGoals
+--  let mut new_goals : List MVarId := []
+--  for goal in goals do
+--    let get_goal ← goal.withContext do
+--      navHave e h mvar
+--    new_goals := new_goals ++ get_goal
+--  new_goals := new_goals ++ [mvar.mvarId!]
+--  replaceMainGoal new_goals
 
 macro "pruneTestMacro" h:ident : tactic => do
   `(tactic|(clear $h))
@@ -216,21 +208,7 @@ elab "navprune" h:ident t:term : tactic => do
   replaceMainGoal new_goals2
 
 
-elab "navhave" h:ident t:term : tactic => do
-  let e ← elabTerm t none
-  let main ← getMainGoal
-  let mvar ← main.withContext do
-    mkFreshExprMVar (e)
-  let goals ← getGoals
-  let mut new_goals : List MVarId := []
-  for goal in goals do
-    let get_goal ← goal.withContext do
-      navHave e h mvar
-    new_goals := new_goals ++ get_goal
-  new_goals := new_goals ++ [mvar.mvarId!]
-  replaceMainGoal new_goals
-
-
+def navproon (name : String) (e : Expr ) (mvar : Expr) : TacticM Unit := do
   let mut new_goals2 : List MVarId := []
   let mut goals ← getGoals
 
@@ -243,22 +221,105 @@ elab "navhave" h:ident t:term : tactic => do
       let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
       let graph ← toGraph tree emptyGraph []
       let fmt ← ppExpr e
-      pruneDescendantsAndProven graph fmt.pretty h.getId.toString []
-    hyp_delete := hyp_delete ++ hyp_delete1
-
+      pruneDescendantsAndProven graph fmt.pretty name []
+    hyp_delete := hyp_delete ++ hyp_delete1--
   for goal in goals do
     if goal == mvar.mvarId! then
       continue
     let mvar2 ← goal.withContext do
-      let mut m := goal
-
+      let mut m := goal--
       for hyp in hyp_delete do
         m ← m.tryClear hyp
       pure m
 
     new_goals2 := new_goals2 ++ [mvar2]
-  logInfo m!"goals2 : {new_goals2}"
+  --logInfo m!"goals2 : {new_goals2}"
   replaceMainGoal new_goals2
+
+
+def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
+  let g ← getMainGoal
+  let lctx ← getLCtx
+  let name := lctx.getUnusedName `h
+  let mut g ← g.assert name toHave mvar
+  let (_, g') ← g.intro h.getId
+  return g'
+
+
+elab "navhave" h:ident t:term : tactic => do
+  let e ← elabTerm t none
+  let main ← getMainGoal
+  let mvar ← main.withContext do
+    mkFreshExprMVar (e)
+  let goals ← getGoals
+  let mut new_goals : List MVarId := []
+  for goal in goals do
+    let get_goal ← goal.withContext do
+      let new_mvar ← navHave e h mvar
+
+      let pruned_mvar ← new_mvar.withContext do
+        let lctx ← getLCtx
+        let mainTarget ← goal.getType
+        let tree ← buildAndOrTree lctx e AndORNodeType.ROOT []
+        let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+        let graph ← toGraph tree emptyGraph []
+        let pretty_new_hyp ← Lean.Meta.ppExpr e
+        let pretty_root ← Lean.Meta.ppExpr mainTarget
+        let mut prune ← pruneDescendants graph pretty_root.pretty h.getId.toString []
+        if prune.length == 0 then
+          prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
+        --let mut get_goal_mvar := new_mvar
+
+        let mut m := new_mvar
+        for hyp in prune do
+          m ← m.tryClear hyp
+        pure [m]
+      pure pruned_mvar
+
+
+    new_goals := new_goals ++ get_goal
+  new_goals := new_goals ++ [mvar.mvarId!]
+  replaceMainGoal new_goals
+
+  --let g ← getGoals
+--  for goal in g do
+--    let ty ← goal.getType
+  --  logInfo m!"goal : {ty}"
+    --goal.withContext do
+--      let lctx ← getLCtx
+  --    let mainTarget ← goal.getType
+    --  let tree ← buildAndOrTree lctx e AndORNodeType.ROOT []
+      --let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+--     let graph ← toGraph tree emptyGraph []
+  --    let pretty_new_hyp ← Lean.Meta.ppExpr e
+    --  let pretty_root ← Lean.Meta.ppExpr mainTarget
+      --let mut prune ← pruneDescendants graph pretty_root.pretty h.getId.toString []
+--      if prune.length == 0 then
+  --      prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
+      --traverse_graph graph pp.pretty []
+
+  --navproon h.getId.toString e mvar
+
+open Lean Meta Elab Tactic Term in
+elab "navhave2" h:ident t:term : tactic => do
+  let h : Name := h.getId
+  let goals ← getGoals
+  let e ← elabType t
+  let mut mainGoal ← getMainGoal
+  let p ← mainGoal.withContext do
+    mkFreshExprMVar e MetavarKind.natural h
+  --let mut side := []
+  for mvarId in goals do
+    mvarId.withContext do
+      let (_, mvarIdNew) ← MVarId.intro1P $ ← mvarId.assert h e p
+      if mvarId == mainGoal then
+        replaceMainGoal [mvarIdNew, p.mvarId!]
+      else
+        let main ← popMainGoal
+        replaceMainGoal [main, mvarIdNew, p.mvarId!]
+        --evalTactic $ ← `(tactic|rotate_left)
+
+
 
 
 
