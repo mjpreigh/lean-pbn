@@ -417,12 +417,12 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
   let node := nodeMap.get? top_node
   let mut seen := seen_in
   let mut delete : List FVarId := []
-  logInfo m!"seen : {seen}"
+  --logInfo m!"seen : {seen}"
 
   match node with
 
   | Node.OR e c _ _ =>
-    logInfo m!"at or {e}"
+    --logInfo m!"at or {e}"
     seen := e :: seen
     -- visit children
     for child in c do
@@ -432,7 +432,7 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
     return delete
 
   | Node.AND n c p _ f =>
-    logInfo m!"at and {n}"
+    --logInfo m!"at and {n}"
     --seen := n :: seen
 
     -- unless node has a parent that is not in seen (or it is ax), add to delete
@@ -441,11 +441,11 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
     let parentsparents ← get_node_parents graph this_parent
     for parent in parentsparents do
       if !(seen.contains parent) && !(this_parent == original_top_node) then
-        logInfo m!"won't delete {n}"
+      --  logInfo m!"won't delete {n}"
         to_delete := false
         break
     if to_delete && !(n == ax) then
-      logInfo m!"adding {n} to delete"
+     -- logInfo m!"adding {n} to delete"
       delete := f :: delete
 
     -- visit children
