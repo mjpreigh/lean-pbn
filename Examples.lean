@@ -109,16 +109,13 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) 
     a :=
   by
 
-
-
-
-    navhave hz hn z
-    navhave hx hn x
+    navhave hz:z end
+    navhave hx:x end
     --navhave hd d
-    --navhave hc c
-    navhave he hb e
+    navhave hc:c end
+    navhave he:e -n hb ha end
 
-    navhave hc ha c
+
 
     --have hb : b := sorry
     --navbottomup

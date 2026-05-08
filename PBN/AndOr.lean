@@ -528,8 +528,8 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   logInfo m!"here 2"
   return []
 
--- returns list of hypotheses to delete based on what having top_node makes provable
-  partial def pruneProven (graph : ANDORGraph) (node_str : String) : MetaM (Prod (List FVarId) (List FVarId) ) := do
+-- returns list of hypotheses to delete based on what having node_str makes provable
+  partial def pruneProven (graph : ANDORGraph) (node_str : String) : MetaM (Prod (List FVarId) (List (List FVarId)) ) := do
   -- start at some OR node
   -- iterate over all parent AND nodes
     -- for any AND node that is satisfied, clear all children and the AND node itself, and call pruneProven on the newly proven OR node
@@ -537,7 +537,7 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? node_str
   let mut delete : List FVarId := []
-  let mut add : List FVarId := []
+  let mut add : List (List FVarId) := []
 
 
 
@@ -560,7 +560,7 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
 
       let rules_parent ← getNodeParents graph parent
       --add := add ++ (← get_node_fvar graph rules_parent[0]!)
-      add := add ++ (← get_ruleapp_args_fvarid graph parent)
+      add := add ++ [(← get_ruleapp_args_fvarid graph parent)]
       delete_goals_local := delete_goals_local ++ parent_args
       delete_rules_local := delete_rules_local ++ [parent]
 

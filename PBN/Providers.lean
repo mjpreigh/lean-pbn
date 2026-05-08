@@ -245,8 +245,13 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
   let (_, g') ← g.intro h.getId
   return g'
 
+--syntax "navhave " ident term (" with " "(" ident,* ")")? : tactic
 
-elab "navhave" h:ident n:ident t:term : tactic => do
+elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
+--("-new_names" "(" n:ident* ")" )?: tactic => do
+  logInfo m!"{n}"
+  let new_names := n
+
   let e ← elabTerm t none
   let main ← getMainGoal
   let mvar ← main.withContext do
@@ -272,17 +277,25 @@ elab "navhave" h:ident n:ident t:term : tactic => do
 
         let mut m := new_mvar
 
-        let add := pruneProvenn.2
-        if add.length > 0 then
+        let addd := pruneProvenn.2
+        let mut name_idx := 0
+        for add in addd do
           logInfo m!"add : {add.length}"
           let add_exp := add.map mkFVar
           let proof := mkAppN add_exp.head! add_exp.tail.toArray
           let type ← inferType proof
           logInfo m!"proof type : {type}"
-          --let name := lctx.getUnusedName `h
           let name ← mkFreshUserName `h
           let m' ← m.assert name type proof
-          let (_, m'') ← m'.intro n.getId
+
+          let name2_option := new_names[name_idx]?
+          let mut name2 := `h
+          match name2_option with
+          | (some (TSyntax.mk stx)) =>
+            name_idx := name_idx + 1
+            name2 := stx.getId
+          | none => name2 := `h
+          let (_, m'') ← m'.intro name2
           m := m''
 
 
@@ -355,7 +368,6 @@ elab "navhave2" h:ident t:term : tactic => do
 
 
 
-
   -- for each context
     -- build and-or graph
     -- prune the stuff that is only a descendant of t- get back a list of hypotheses to delete from the context
@@ -385,3 +397,4 @@ elab "navhave2" h:ident t:term : tactic => do
 
 
 -- if main goal gets proven, prune sub-goals that aren't on the derivation path
+-- if a goal gets proven as an effect of a navhave, also prune other stuff below it
