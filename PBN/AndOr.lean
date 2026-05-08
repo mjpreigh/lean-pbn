@@ -516,16 +516,13 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   let node := nodeMap.get? node_str
   match node with
   | Node.OR _ _ p _ => do
-    logInfo m!"here 1"
     return []
   | Node.AND _ c _ _ f => do
     let mut args := [f]
     for child in c do
       args := args ++ (← get_node_fvar graph child)
-    logInfo m!"args here : {repr args}"
     return args
   | none => do
-  logInfo m!"here 2"
   return []
 
 -- returns list of hypotheses to delete based on what having node_str makes provable

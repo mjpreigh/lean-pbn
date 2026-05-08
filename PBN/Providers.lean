@@ -248,8 +248,6 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
 --syntax "navhave " ident term (" with " "(" ident,* ")")? : tactic
 
 elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
---("-new_names" "(" n:ident* ")" )?: tactic => do
-  logInfo m!"{n}"
   let new_names := n
 
   let e ← elabTerm t none
@@ -269,8 +267,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
         let graph ← toGraph tree emptyGraph []
         let pretty_new_hyp ← Lean.Meta.ppExpr e
-        let pretty_root ← Lean.Meta.ppExpr mainTarget
-        logInfo m!"goal : {mainTarget}"
+
         let mut pruneProvenn ← pruneProven graph pretty_new_hyp.pretty
 
 
@@ -280,11 +277,9 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         let addd := pruneProvenn.2
         let mut name_idx := 0
         for add in addd do
-          logInfo m!"add : {add.length}"
           let add_exp := add.map mkFVar
           let proof := mkAppN add_exp.head! add_exp.tail.toArray
           let type ← inferType proof
-          logInfo m!"proof type : {type}"
           let name ← mkFreshUserName `h
           let m' ← m.assert name type proof
 
@@ -398,3 +393,6 @@ elab "navhave2" h:ident t:term : tactic => do
 
 -- if main goal gets proven, prune sub-goals that aren't on the derivation path
 -- if a goal gets proven as an effect of a navhave, also prune other stuff below it
+
+
+-- if extra hypotheses get created at a navhave in a particular context, should other contexts get access to those hypotheses?

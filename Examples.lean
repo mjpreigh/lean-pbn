@@ -111,28 +111,11 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) 
 
     navhave hz:z end
     navhave hx:x end
+    navhave he:e -n hb end
     --navhave hd d
     navhave hc:c end
-    navhave he:e -n hb ha end
-
-
-
-    --have hb : b := sorry
-    --navbottomup
-
-
-    --navhave h b
-   -- . exact hy
-   -- . apply ea h
-   -- . exact he
-
-    --navprune h e
-
-    --navprune e he
-
-    --navhave h e
-    --navprune h e
-    --. apply ea
-     -- exact h
-    --. exact hy
-    --. exact he
+    .sorry
+    .sorry
+    .sorry
+    .sorry
+    .sorry
