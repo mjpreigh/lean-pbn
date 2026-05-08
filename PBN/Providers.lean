@@ -156,7 +156,7 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
 --syntax "navhave " ident term (" with " "(" ident,* ")")? : tactic
 
 elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
-  let new_names := n
+
 
   let e ← elabTerm t none
   let main ← getMainGoal
@@ -184,8 +184,13 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
         -- are new hyptheses available now? P
         let addd := pruneProvenn.2
+        let mut new_names := n.map (·.getId)
+        while new_names.toList.length < addd.length do
+          let temp ← mkFreshUserName `h
+          new_names := new_names.push temp
         let mut name_idx := 0
         let mut new_h := h.getId
+        new_names := new_names.reverse
         for add in addd do
 
           let add_exp := add.map mkFVar
@@ -199,11 +204,13 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           let name2_option := new_names[name_idx]?
           let mut name2 ← mkFreshUserName `h
           match name2_option with
-          | (some (TSyntax.mk stx)) =>
+          | (some existing_name) =>
+            logInfo m!"here1"
             name_idx := name_idx + 1
-            name2 := stx.getId
-            new_h := stx.getId
+            name2 := existing_name
+            new_h := existing_name
           | none =>
+            logInfo m!"here2"
             name2 := name2
             new_h := name2
           let (_, m'') ← m'.intro name2
@@ -269,7 +276,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 -- some sort of navigation strategies (random, all, essential etc)
 
 
--- if main goal gets proven, prune sub-goals that aren't on the derivation path
+-- if main goal gets proven, exact that and then prune sub-goals that aren't on the derivation path
 -- if a something gets proven as an effect of a navhave, also prune other stuff below it
 
 

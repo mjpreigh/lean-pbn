@@ -111,6 +111,6 @@ theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → x�
 
     navhave hz:z end
     navhave hx:x end
-    navhave hc:c -n end
-    navhave he:e -n end
+    navhave hc:c end
+    navhave he:e -n ha end
     --navhave hd d
