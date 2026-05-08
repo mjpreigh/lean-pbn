@@ -221,8 +221,8 @@ def navproon (name : String) (e : Expr ) (mvar : Expr) : TacticM Unit := do
       let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
       let graph ← toGraph tree emptyGraph []
       let fmt ← ppExpr e
-      pruneDescendantsAndProven graph fmt.pretty name []
-    hyp_delete := hyp_delete ++ hyp_delete1--
+      --pruneDescendantsAndProven graph fmt.pretty name []
+    --hyp_delete := hyp_delete ++ hyp_delete1--
   for goal in goals do
     if goal == mvar.mvarId! then
       continue
@@ -246,7 +246,7 @@ def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
   return g'
 
 
-elab "navhave" h:ident t:term : tactic => do
+elab "navhave" h:ident n:ident t:term : tactic => do
   let e ← elabTerm t none
   let main ← getMainGoal
   let mvar ← main.withContext do
@@ -260,27 +260,50 @@ elab "navhave" h:ident t:term : tactic => do
       let pruned_mvar ← new_mvar.withContext do
         let lctx ← getLCtx
         let mainTarget ← goal.getType
-        let tree ← buildAndOrTree lctx e AndORNodeType.ROOT []
+        let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
         let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
         let graph ← toGraph tree emptyGraph []
         let pretty_new_hyp ← Lean.Meta.ppExpr e
         let pretty_root ← Lean.Meta.ppExpr mainTarget
-        let mut pruneProven ← pruneProvenString graph pretty_root.pretty h.getId.toString []
-        logInfo m!"prune proven : {pruneProven}"
-        let mut prune ← pruneDescendants graph pretty_root.pretty h.getId.toString []
-        --let mut pruneStr ← pruneDescendantsString graph pretty_root.pretty h.getId.toString []
-        if prune.length == 0 then
-          prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
-          --pruneStr ← pruneDescendantsString graph pretty_new_hyp.pretty h.getId.toString []
-        traverse_graph graph graph.root []
+        logInfo m!"goal : {mainTarget}"
+        let mut pruneProvenn ← pruneProven graph pretty_new_hyp.pretty
 
-        --logInfo m!"goal : {e}, prune : {pruneStr}, len : {prune.length}, len : {pruneStr.length}"
-        --let mut get_goal_mvar := new_mvar
+
 
         let mut m := new_mvar
-        for hyp in prune do
-          m ← m.tryClear hyp
-        pure [m]
+
+        let add := pruneProvenn.2
+        if add.length > 0 then
+          logInfo m!"add : {add.length}"
+          let add_exp := add.map mkFVar
+          let proof := mkAppN add_exp.head! add_exp.tail.toArray
+          let type ← inferType proof
+          logInfo m!"proof type : {type}"
+          --let name := lctx.getUnusedName `h
+          let name ← mkFreshUserName `h
+          let m' ← m.assert name type proof
+          let (_, m'') ← m'.intro n.getId
+          m := m''
+
+
+        let new_pruned_mvar ← m.withContext do
+          let mut n := m
+          let lctx ← getLCtx
+          let mainTarget ← goal.getType
+          let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+          let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+          let graph ← toGraph tree emptyGraph []
+
+          let mut prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
+          let mut pruneProven2 ← pruneProven graph pretty_new_hyp.pretty
+          prune := prune ++ pruneProven2.1
+
+
+          for hyp in prune do
+            n ← n.tryClear hyp
+
+          pure n
+        pure [new_pruned_mvar]
       pure pruned_mvar
 
 
@@ -359,3 +382,6 @@ elab "navhave2" h:ident t:term : tactic => do
 -- finish the newly proved part of navhave
 -- false labels -> but actually means unprovable
 -- some sort of navigation strategies (random, all, essential etc)
+
+
+-- if main goal gets proven, prune sub-goals that aren't on the derivation path
