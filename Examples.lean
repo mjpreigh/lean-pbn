@@ -105,17 +105,12 @@ theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (
     --navbottomup
     sorry
 
-theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (h : e → x → z → b) (i : z → y → b):
+theorem testtt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → x→ a) (h : e → x → z → b) (i : z → y → b):
     a :=
   by
 
     navhave hz:z end
     navhave hx:x end
-    navhave he:e -n hb end
+    navhave hc:c -n end
+    navhave he:e -n end
     --navhave hd d
-    navhave hc:c end
-    .sorry
-    .sorry
-    .sorry
-    .sorry
-    .sorry

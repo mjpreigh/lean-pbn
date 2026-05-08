@@ -403,38 +403,54 @@ def remove_goals (false_set : List String) (graph_in : ANDORGraph) : TacticM AND
   let graph_out : ANDORGraph := { edges := edges, nodeMap := nodeMap, root := root, andMap := andMap}
   return graph_out
 
+def get_node_parents (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_str
+  match node with
+  | Node.OR _ _ p _ => return p
+  | Node.AND _ _ p _ _ => return p
+  | none => return []
+
 -- returns list of hypotheses to delete below the given top_node
-partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
+partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) (original_top_node : String) : MetaM (List FVarId) := do
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? top_node
   let mut seen := seen_in
   let mut delete : List FVarId := []
+  logInfo m!"seen : {seen}"
 
   match node with
 
   | Node.OR e c _ _ =>
+    logInfo m!"at or {e}"
     seen := e :: seen
     -- visit children
     for child in c do
-      let delete_intermediate ← pruneDescendants graph child ax seen
+      seen := seen ++ c
+      let delete_intermediate ← pruneDescendants graph child ax seen original_top_node
       delete := delete ++ delete_intermediate
     return delete
 
   | Node.AND n c p _ f =>
-    seen := n :: seen
+    logInfo m!"at and {n}"
+    --seen := n :: seen
 
     -- unless node has a parent that is not in seen (or it is ax), add to delete
     let mut to_delete := true
-    for parent in p do
-      if !seen.contains parent then
+    let this_parent := p[0]!
+    let parentsparents ← get_node_parents graph this_parent
+    for parent in parentsparents do
+      if !(seen.contains parent) && !(this_parent == original_top_node) then
+        logInfo m!"won't delete {n}"
         to_delete := false
         break
     if to_delete && !(n == ax) then
+      logInfo m!"adding {n} to delete"
       delete := f :: delete
 
     -- visit children
     for child in c do
-      let delete_intermediate ← pruneDescendants graph child ax seen
+      let delete_intermediate ← pruneDescendants graph child ax seen original_top_node
       delete := delete ++ delete_intermediate
     return delete
 
@@ -481,14 +497,6 @@ def get_node_fvar (graph : ANDORGraph) (node_str : String) : MetaM (List FVarId)
   match node with
   | Node.OR _ _ _ f => return [f]
   | Node.AND _ _ _ _ f => return [f]
-  | none => return []
-
-def get_node_parents (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
-  let nodeMap := graph.nodeMap
-  let node := nodeMap.get? node_str
-  match node with
-  | Node.OR _ _ p _ => return p
-  | Node.AND _ _ p _ _ => return p
   | none => return []
 
 def get_node_expr (graph : ANDORGraph) (node_str : String) : MetaM (List Expr) :=

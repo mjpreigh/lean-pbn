@@ -174,7 +174,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
         let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
         let graph ← toGraph tree emptyGraph []
-        let pretty_new_hyp ← Lean.Meta.ppExpr e
+        let mut pretty_new_hyp ← Lean.Meta.ppExpr e
 
         let mut pruneProvenn ← pruneProven graph pretty_new_hyp.pretty
 
@@ -182,26 +182,34 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
         let mut m := new_mvar
 
+        -- are new hyptheses available now? P
         let addd := pruneProvenn.2
         let mut name_idx := 0
+        let mut new_h := h.getId
         for add in addd do
+
           let add_exp := add.map mkFVar
           let proof := mkAppN add_exp.head! add_exp.tail.toArray
           let type ← inferType proof
+          pretty_new_hyp ← Lean.Meta.ppExpr type
+          logInfo m!"new pretty : {pretty_new_hyp}"
           let name ← mkFreshUserName `h
           let m' ← m.assert name type proof
 
           let name2_option := new_names[name_idx]?
-          let mut name2 := `h
+          let mut name2 ← mkFreshUserName `h
           match name2_option with
           | (some (TSyntax.mk stx)) =>
             name_idx := name_idx + 1
             name2 := stx.getId
-          | none => name2 := `h
+            new_h := stx.getId
+          | none =>
+            name2 := name2
+            new_h := name2
           let (_, m'') ← m'.intro name2
           m := m''
 
-
+        --
         let new_pruned_mvar ← m.withContext do
           let mut n := m
           let lctx ← getLCtx
@@ -210,9 +218,9 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
           let graph ← toGraph tree emptyGraph []
 
-          let mut prune ← pruneDescendants graph pretty_new_hyp.pretty h.getId.toString []
-          let mut pruneProven2 ← pruneProven graph pretty_new_hyp.pretty
-          prune := prune ++ pruneProven2.1
+          let mut prune ← pruneDescendants graph pretty_new_hyp.pretty new_h.toString [] pretty_new_hyp.pretty
+          --let mut pruneProven2 ← pruneProven graph pretty_new_hyp.pretty
+          --prune := prune ++ pruneProven2.1
 
 
           for hyp in prune do
