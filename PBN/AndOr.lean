@@ -412,11 +412,12 @@ def get_node_parents (graph : ANDORGraph) (node_str : String) : MetaM (List Stri
   | none => return []
 
 -- returns list of hypotheses to delete below the given top_node
-partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) (original_top_node : String) : MetaM (List FVarId) := do
+partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) (original_top_node : String) : MetaM (Prod (List FVarId) (List String)) := do
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? top_node
   let mut seen := seen_in
   let mut delete : List FVarId := []
+  let mut deletestr : List String := []
   --logInfo m!"seen : {seen}"
 
   match node with
@@ -428,12 +429,15 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
     for child in c do
       seen := seen ++ c
       let delete_intermediate ← pruneDescendants graph child ax seen original_top_node
-      delete := delete ++ delete_intermediate
-    return delete
+      delete := delete ++ delete_intermediate.1
+      deletestr := deletestr ++ delete_intermediate.2
+    return (delete, deletestr)
 
   | Node.AND n c p _ f =>
     --logInfo m!"at and {n}"
     --seen := n :: seen
+
+    -- if not all
 
     -- unless node has a parent that is not in seen (or it is ax), add to delete
     let mut to_delete := true
@@ -447,14 +451,16 @@ partial def pruneDescendants (graph : ANDORGraph) (top_node : String) (ax : Stri
     if to_delete && !(n == ax) then
      -- logInfo m!"adding {n} to delete"
       delete := f :: delete
+      deletestr := n :: deletestr
 
     -- visit children
     for child in c do
       let delete_intermediate ← pruneDescendants graph child ax seen original_top_node
-      delete := delete ++ delete_intermediate
-    return delete
+      delete := delete ++ delete_intermediate.1
+      deletestr := deletestr ++ delete_intermediate.2
+    return (delete, deletestr)
 
-  | none => return []
+  | none => return ([], [])
 
 def getNodeParents (graph : ANDORGraph) (node_str : String) : MetaM (List String) :=
   let nodeMap := graph.nodeMap
@@ -534,7 +540,7 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   return []
 
 -- returns list of hypotheses to delete based on what having node_str makes provable
-  partial def pruneProven (graph : ANDORGraph) (node_str : String) : MetaM (Prod (List FVarId) (List (List FVarId)) ) := do
+  partial def pruneProven (graph : ANDORGraph) (node_str : String) : MetaM (Prod (Prod (List FVarId) (List (List FVarId))) (List String)) := do
   -- start at some OR node
   -- iterate over all parent AND nodes
     -- for any AND node that is satisfied, clear all children and the AND node itself, and call pruneProven on the newly proven OR node
@@ -543,6 +549,7 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   let node := nodeMap.get? node_str
   let mut delete : List FVarId := []
   let mut add : List (List FVarId) := []
+  let mut derivation_path:(List String) := []
 
 
 
@@ -562,6 +569,8 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
           break
       if !all_args_proven then
         continue
+      -- add this rule to the derivation path
+      derivation_path := derivation_path ++ [parent]
 
       let rules_parent ← getNodeParents graph parent
       --add := add ++ (← get_node_fvar graph rules_parent[0]!)
@@ -571,8 +580,9 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
 
       -- repeat this process on the parent of this rule
       let new_delete ← pruneProven graph (←getNodeParents graph parent)[0]!
-      delete := delete ++ new_delete.1
-      add := add ++ new_delete.2
+      delete := delete ++ new_delete.1.1
+      add := add ++ new_delete.1.2
+      derivation_path := derivation_path ++ new_delete.2
 
       any_parent_sat := true
       -- delete this or node and the sat rule, and call pruneProven on the proven or node
@@ -594,9 +604,9 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
     --delete := delete ++ [s]
 
 
-    return (delete, add)
-  | Node.AND _ _ _ _ _ => return ([], [])
-  | none => return ([], [])
+    return ((delete, add), derivation_path)
+  | Node.AND _ _ _ _ _ => return (([], []), [])
+  | none => return (([], []), [])
 
 --partial def pruneDescendantsAndProven (graph : ANDORGraph) (top_node : String) (ax : String) (seen_in : List String) : MetaM (List FVarId) := do
 --  let l1 ← pruneDescendants graph top_node ax seen_in

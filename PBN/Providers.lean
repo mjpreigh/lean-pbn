@@ -177,13 +177,13 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         let mut pretty_new_hyp ← Lean.Meta.ppExpr e
 
         let mut pruneProvenn ← pruneProven graph pretty_new_hyp.pretty
-
+        let derivation_path := pruneProvenn.2
 
 
         let mut m := new_mvar
 
         -- are new hyptheses available now? P
-        let addd := pruneProvenn.2
+        let addd := pruneProvenn.1.2
         let mut new_names := n.map (·.getId)
         while new_names.toList.length < addd.length do
           let temp ← mkFreshUserName `h
@@ -222,13 +222,22 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
           let graph ← toGraph tree emptyGraph []
 
-          let mut prune ← pruneDescendants graph pretty_new_hyp.pretty new_h.toString [] pretty_new_hyp.pretty
+          let prune1 ← pruneDescendants graph pretty_new_hyp.pretty new_h.toString [] pretty_new_hyp.pretty
+          let prune := prune1.1
+          let prunestr := prune1.2
           --let mut pruneProven2 ← pruneProven graph pretty_new_hyp.pretty
           --prune := prune ++ pruneProven2.1
 
 
           for hyp in prune do
             n ← n.tryClear hyp
+
+          logInfo m!"{derivation_path} is derivation path"
+          logInfo m!"{prunestr} were pruned"
+          for hyp in prunestr do
+            logInfo m!"is {hyp} on derivation path?"
+            if !derivation_path.contains hyp then
+              logInfo m!"{hyp} not on derivation path"
 
           pure n
         pure [new_pruned_mvar]
@@ -239,6 +248,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   new_goals := new_goals ++ [mvar.mvarId!]
   replaceMainGoal new_goals
 
+  -- solve main goal if goal type has been reached
   let main ← getMainGoal
   let maint := (←main.getDecl).type
   main.withContext do
@@ -246,10 +256,13 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
     for ldecl in lctx do
       unless ldecl.isImplementationDetail do
         let t ← inferType ldecl.toExpr
-        logInfo m!"{t}, {maint}"
         if t == maint then
           let uname := mkIdent (ldecl.userName)
           evalTactic (← `(tactic| exact $uname))
+
+elab "navhavent"  t:term : tactic => do
+  -- remove any rules that use this term, in all contexts
+  return
 
 
 
