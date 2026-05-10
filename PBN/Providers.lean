@@ -261,8 +261,41 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           evalTactic (← `(tactic| exact $uname))
 
 elab "navhavent"  t:term : tactic => do
-  -- remove any rules that use this term, in all contexts
-  return
+  -- first remove any rules that use this term, then the prop itself, in all contexts
+  let t_havent  ← elabTerm t none
+  let t_string_fmt ← ppExpr t_havent
+  let t_string := t_string_fmt.pretty
+
+  let newgoals ← withMainContext do
+    let goals ← getGoals
+    let mut new_goals : List MVarId := []
+    for goal in goals do
+      let mut fvar := t_havent.fvarId!
+      let mut m := goal
+      let lctx ← getLCtx
+      for ldecl in lctx do
+        unless ldecl.isImplementationDetail do
+          let ldecl_expr := (← inferType ldecl.toExpr)
+          logInfo m!"name: {ldecl.userName}, val: {ldecl_expr}"
+          if ldecl.userName.toString == t_string then
+            fvar := ldecl.fvarId
+
+          -- if the typeof this hyp contains t, delte
+          let args ← getArgsRawAll  ldecl_expr
+          --logInfo m!"args: {args}"
+          if args.contains t_string then
+            --logInfo m!"remove this: {ldecl.userName}"
+            m ← m.tryClear ldecl.fvarId
+
+      -- delete this as a prop
+      m ← m.tryClear fvar
+      new_goals := new_goals ++ [m]
+
+
+    return new_goals
+
+  replaceMainGoal newgoals
+
 
 
 

@@ -287,6 +287,25 @@ def getArgsRaw (e : Expr) : MetaM (List String) := do
     | _ => break
   return args
 
+  def getArgsRawAll (e : Expr) : MetaM (List String) := do
+  let mut exp := e
+  let mut args := []
+  let mut keepgoing := true
+  while keepgoing do
+    exp ← whnf exp
+    match exp with
+    | Expr.forallE _ first body _ =>
+        let fmt ← PrettyPrinter.ppExpr first
+        let string_rep := fmt.pretty
+        args := [string_rep] ++ args
+        exp := body
+    | x =>
+      let fmt ← PrettyPrinter.ppExpr x
+      let string_rep := fmt.pretty
+      args := [string_rep] ++ args
+      keepgoing := false
+  return args
+
 def dropLeftMost (e : Expr) : MetaM Expr := do
   let e ← whnf e
   match e with

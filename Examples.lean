@@ -109,8 +109,11 @@ theorem testtt (a b c d e x y z m p : Prop) (f : b → c → a) (g : c → d →
     a :=
   by
 
+    navhave hh:c → b end
+
 
     navhave hz:z end
+    navhavent b
     navhave hm:m end
     navhave hx:x end
     navhave hp:p end
