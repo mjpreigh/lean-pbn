@@ -260,23 +260,28 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           let uname := mkIdent (ldecl.userName)
           evalTactic (← `(tactic| exact $uname))
 
+-- change this loop so that it isn't always just in the main context
 elab "navhavent"  t:term : tactic => do
   -- first remove any rules that use this term, then the prop itself, in all contexts
   let t_havent  ← elabTerm t none
   let t_string_fmt ← ppExpr t_havent
   let t_string := t_string_fmt.pretty
 
-  let newgoals ← withMainContext do
-    let goals ← getGoals
-    let mut new_goals : List MVarId := []
-    for goal in goals do
+  --let newgoals ← withMainContext do
+  let goals ← getGoals
+
+  let mut new_goals : List MVarId := []
+  for goal in goals do
+    let goalp ← goal.getType
+    let goalpp ← ppExpr goalp
+    let new_goal_ctx ← goal.withContext do
+
       let mut fvar := t_havent.fvarId!
       let mut m := goal
       let lctx ← getLCtx
       for ldecl in lctx do
         unless ldecl.isImplementationDetail do
           let ldecl_expr := (← inferType ldecl.toExpr)
-          logInfo m!"name: {ldecl.userName}, val: {ldecl_expr}"
           if ldecl.userName.toString == t_string then
             fvar := ldecl.fvarId
 
@@ -289,12 +294,16 @@ elab "navhavent"  t:term : tactic => do
 
       -- delete this as a prop
       m ← m.tryClear fvar
-      new_goals := new_goals ++ [m]
+      let mut ret := []
+      if goalpp.pretty != t_string then
+        ret := [m]
+      return ret
+    new_goals := new_goals ++ new_goal_ctx
 
 
-    return new_goals
+    --return new_goals
 
-  replaceMainGoal newgoals
+  replaceMainGoal new_goals
 
 
 
