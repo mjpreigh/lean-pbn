@@ -1,4 +1,5 @@
 import PBN
+set_option diagnostics true
 
 theorem a_proof_of_negation (a : Prop) :
     a → ¬¬ a :=
@@ -109,25 +110,25 @@ theorem testtt (a b c d e x y z m p : Prop) (f : b → c → a) (g : c → d →
     a :=
   by
 
-    navhave hh:c → b end
-
 
     navhave hz:z end
-    --navhavent b
-    navhave hm:m end
-    navhave hx:x end
     navhave hp:p end
+    --navhavent b
+    navhave hx:x end
     navhavent p
+    --navhave hc:c end
+
     navhave he:e -n hb end
 
+
     navhave hc:c end
-    . sorry
-    . sorry
-    . sorry
-    . navhave hp:p end
-      . sorry
-    . sorry
-    . sorry
+    .sorry
+    .sorry
+    .sorry
+    .sorry
+
+
+
 
 
     --navhave hd d

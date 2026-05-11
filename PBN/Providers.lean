@@ -193,9 +193,16 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         new_names := new_names.reverse
         for add in addd do
 
-          let add_exp := add.map mkFVar
-          let proof := mkAppN add_exp.head! add_exp.tail.toArray
+          let mut add_exp := add.map mkFVar
+
+          for arg in add_exp do
+            let ty ← inferType arg
+          let mut add_args := add_exp.tail.toArray
+          add_args := add_args.reverse
+          let proof := mkAppN add_exp.head! add_args
+          logInfo m!"head : {add_exp.head!}, tail : {add_args}"
           let type ← inferType proof
+          Lean.Meta.check proof
           pretty_new_hyp ← Lean.Meta.ppExpr type
           let name ← mkFreshUserName `h
           let m' ← m.assert name type proof
@@ -231,13 +238,6 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
           for hyp in prune do
             n ← n.tryClear hyp
-
-          logInfo m!"{derivation_path} is derivation path"
-          logInfo m!"{prunestr} were pruned"
-          for hyp in prunestr do
-            logInfo m!"is {hyp} on derivation path?"
-            if !derivation_path.contains hyp then
-              logInfo m!"{hyp} not on derivation path"
 
           pure n
         pure [new_pruned_mvar]

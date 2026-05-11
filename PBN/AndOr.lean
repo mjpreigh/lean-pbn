@@ -544,6 +544,21 @@ def get_ruleapp_args (graph : ANDORGraph) (node_str : String) : MetaM (List Expr
     return args
   | none => return []
 
+def get_hyp_with_type (graph : ANDORGraph) (ty : String) : MetaM (List FVarId) := do
+  let mut ret := []
+  --let ty_str ← ppExpr ty
+  for (_, n) in graph.nodeMap do
+    match n with
+    | Node.AND _ _ _ e f =>
+      let e_str ← ppExpr e
+      if e_str.pretty == ty then
+      ret := [f]
+      break
+    | Node.OR _ _ _ _ => continue
+  logInfo m!"ty : {ty}, ret: {repr ret}"
+  return ret
+
+-- return the fvarid of the hypothesis who has the type
 def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (List FVarId) :=
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? node_str
@@ -553,7 +568,7 @@ def get_ruleapp_args_fvarid (graph : ANDORGraph) (node_str : String) : MetaM (Li
   | Node.AND _ c _ _ f => do
     let mut args := [f]
     for child in c do
-      args := args ++ (← get_node_fvar graph child)
+      args := args ++ (← get_hyp_with_type graph child)
     return args
   | none => do
   return []
