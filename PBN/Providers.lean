@@ -147,24 +147,70 @@ elab "navbottomup" : tactic => do
 
 def navHave (toHave : Expr) (h : Ident) (mvar : Expr) : TacticM MVarId := do
   let g ← getMainGoal
+  let g_type ← g.getType
   let lctx ← getLCtx
   let name := lctx.getUnusedName `h
   let mut g ← g.assert name toHave mvar
   let (_, g') ← g.intro h.getId
+
+/-
+  let new_g' ← g'.withContext do
+    let lctx_g ← getLCtx
+
+    let tree ← buildAndOrTree lctx_g g_type AndORNodeType.ROOT []
+    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+    let graph ← toGraph tree emptyGraph []
+    --traverse_graph graph graph.root []
+    logInfo m!"have : {toHave}"
+    let ppe ← Lean.Meta.ppExpr toHave
+    let prune ← pruneAllNotBelow graph ppe.pretty
+    logInfo m!"prune : {repr prune}"
+
+    let mut current := g'
+    for hyp in prune do
+      current ← current.tryClear hyp
+    pure current-/
+
   return g'
 
 --syntax "navhave " ident term (" with " "(" ident,* ")")? : tactic
 
 elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
-
   let e ← elabTerm t none
   let main ← getMainGoal
   let mvar ← main.withContext do
     mkFreshExprMVar (e)
+  /-let mvar ← main.withContext do
+    let mut newmv := (← mkFreshExprMVar (e)).mvarId!
+
+    newmv ← newmv.withContext do
+      let lctx_g ← getLCtx
+
+      let tree ← buildAndOrTree lctx_g (← main.getType) AndORNodeType.ROOT []
+      let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+      let graph ← toGraph tree emptyGraph []
+      --traverse_graph graph graph.root []
+      logInfo m!"have : {e}"
+      let ppe ← Lean.Meta.ppExpr e
+      let prune ← pruneAllNotBelow graph ppe.pretty
+      logInfo m!"prune : {repr prune}"
+
+      let mut current := newmv
+      for hyp in prune do
+        current ← current.tryClear hyp
+      pure current
+    pure newmv-/
+
+
+
+
+
   let goals ← getGoals
   let mut new_goals : List MVarId := []
   for goal in goals do
+    if goal == mvar.mvarId! then
+      logInfo m!"at new one!!!"
     let get_goal ← goal.withContext do
       let new_mvar ← navHave e h mvar
 
@@ -184,6 +230,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
         -- are new hyptheses available now? P
         let addd := pruneProvenn.1.2
+        logInfo m!"addd : {addd}"
         let mut new_names := n.map (·.getId)
         while new_names.toList.length < addd.length do
           let temp ← mkFreshUserName `h
@@ -193,19 +240,23 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
         new_names := new_names.reverse
         for add in addd do
 
-          let mut add_exp := add.map mkFVar
+          --let mut add_exp := add.map mkFVar
+          let mut add_exp := add
 
-          for arg in add_exp do
-            let ty ← inferType arg
+
           let mut add_args := add_exp.tail.toArray
           add_args := add_args.reverse
           let proof := mkAppN add_exp.head! add_args
           logInfo m!"head : {add_exp.head!}, tail : {add_args}"
+          for arg in add_args do
+            let ty ← inferType arg
+            logInfo m!"ARG {arg} : {ty}"
           let type ← inferType proof
-          Lean.Meta.check proof
+
           pretty_new_hyp ← Lean.Meta.ppExpr type
           let name ← mkFreshUserName `h
-          let m' ← m.assert name type proof
+
+          m ← m.assert name type proof
 
           let name2_option := new_names[name_idx]?
           let mut name2 ← mkFreshUserName `h
@@ -217,8 +268,8 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           | none =>
             name2 := name2
             new_h := name2
-          let (_, m'') ← m'.intro name2
-          m := m''
+          let (_, m') ← m.intro name2
+          m := m'
 
         --
         let new_pruned_mvar ← m.withContext do
@@ -245,7 +296,26 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 
 
     new_goals := new_goals ++ get_goal
-  new_goals := new_goals ++ [mvar.mvarId!]
+
+  let new_mvar ← mvar.mvarId!.withContext do
+    let lctx_g ← getLCtx
+
+    let tree ← buildAndOrTree lctx_g (← main.getType) AndORNodeType.ROOT []
+    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+    let graph ← toGraph tree emptyGraph []
+      --traverse_graph graph graph.root []
+    logInfo m!"have : {e}"
+    let ppe ← Lean.Meta.ppExpr e
+    let prune ← pruneAllNotBelow graph ppe.pretty
+    logInfo m!"prune : {repr prune}"
+
+    let mut current := mvar.mvarId!
+    for hyp in prune do
+      current ← current.tryClear hyp
+    pure current
+
+
+  new_goals := new_goals ++ [new_mvar]
   replaceMainGoal new_goals
 
   -- solve main goal if goal type has been reached
@@ -261,7 +331,7 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           evalTactic (← `(tactic| exact $uname))
 
 -- change this loop so that it isn't always just in the main context
-elab "navhavent"  t:term : tactic => do
+elab "navhaventold"  t:term : tactic => do
   -- first remove any rules that use this term, then the prop itself, in all contexts
   let t_havent  ← elabTerm t none
   let t_string_fmt ← ppExpr t_havent
@@ -306,10 +376,195 @@ elab "navhavent"  t:term : tactic => do
   replaceMainGoal new_goals
 
 
+elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
+
+  let e ← elabTerm t none
+  let main ← getMainGoal
+  let mvar ← main.withContext do
+    mkFreshExprMVar (e)
+
+
+  let goals ← getGoals
+  let mut new_goals : List MVarId := []
+  for goal in goals do
+    let get_goal ← goal.withContext do
+      let new_mvar ← navHave e h mvar
+
+      let pruned_mvar ← new_mvar.withContext do
+        let lctx ← getLCtx
+        let mainTarget ← goal.getType
+        let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+        let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+        let graph ← toGraph tree emptyGraph []
+
+        let mut pretty_new_hyp ← Lean.Meta.ppExpr e
+
+        let mut pruneProvenn ← pruneProven graph pretty_new_hyp.pretty
+        let derivation_path := pruneProvenn.2
+
+
+        let mut m := new_mvar
+
+        -- are new hyptheses available now? P
+        let addd := pruneProvenn.1.2
+        logInfo m!"addd: {addd}"
+        let mut new_names := n.map (·.getId)
+        while new_names.toList.length < addd.length do
+          let temp ← mkFreshUserName `h
+          new_names := new_names.push temp
+        let mut name_idx := 0
+        let mut new_h := h.getId
+        new_names := new_names.reverse
+        for add in addd do
+
+          --let mut add_exp := add.map mkFVar
+          let mut add_exp := add
+
+          for arg in add_exp do
+            let ty ← inferType arg
+          let mut add_args := add_exp.tail.toArray
+          add_args := add_args.reverse
+          logInfo m!"head : {add_exp.head!}, tail : {add_args}"
+          let proof := mkAppN add_exp.head! add_args
+
+          let type ← inferType proof
+          Lean.Meta.check proof
+          pretty_new_hyp ← Lean.Meta.ppExpr type
+          let name ← mkFreshUserName `h
+          let m' ← new_mvar.assert name type proof
+
+          let name2_option := new_names[name_idx]?
+          let mut name2 ← mkFreshUserName `h
+          match name2_option with
+          | (some existing_name) =>
+            name_idx := name_idx + 1
+            name2 := existing_name
+            new_h := existing_name
+          | none =>
+            name2 := name2
+            new_h := name2
+          let (_, m'') ← m'.intro name2
+          m := m''
+
+        --
+        let new_pruned_mvar ← m.withContext do
+          let mut n := m
+          let lctx ← getLCtx
+          let mainTarget ← goal.getType
+          let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+          let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+          let graph ← toGraph tree emptyGraph []
+
+          let prune1 ← pruneDescendants graph pretty_new_hyp.pretty new_h.toString [] pretty_new_hyp.pretty
+          let mut prune := prune1.1
+          let prunestr := prune1.2
+          logInfo m!"using: {pretty_new_hyp.pretty}"
+          let reachable ← bangPruneIrrelevant graph pretty_new_hyp.pretty
+          prune := prune ++ reachable
+          --logInfo m!"not reachable: {reachable}"
+          --let mut pruneProven2 ← pruneProven graph pretty_new_hyp.pretty
+          --prune := prune ++ pruneProven2.1
+
+
+          for hyp in prune do
+            n ← n.tryClear hyp
+
+          pure n
+        pure [new_pruned_mvar]
+      pure pruned_mvar
+
+
+    new_goals := new_goals ++ get_goal
+
+  let new_mvar ← mvar.mvarId!.withContext do
+    let lctx_g ← getLCtx
+
+    let tree ← buildAndOrTree lctx_g (← main.getType) AndORNodeType.ROOT []
+    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+    let graph ← toGraph tree emptyGraph []
+      --traverse_graph graph graph.root []
+    logInfo m!"have : {e}"
+    let ppe ← Lean.Meta.ppExpr e
+    let prune ← pruneAllNotBelow graph ppe.pretty
+    logInfo m!"prune : {repr prune}"
+
+    let mut current := mvar.mvarId!
+    for hyp in prune do
+      current ← current.tryClear hyp
+    pure current
+
+  new_goals := new_goals ++ [new_mvar]
+  replaceMainGoal new_goals
+
+
+  -- solve main goal if goal type has been reached
+  let main ← getMainGoal
+  let maint := (←main.getDecl).type
+  main.withContext do
+    let lctx ← getLCtx
+    for ldecl in lctx do
+      unless ldecl.isImplementationDetail do
+        let t ← inferType ldecl.toExpr
+        if t == maint then
+          let uname := mkIdent (ldecl.userName)
+          evalTactic (← `(tactic| exact $uname))
 
 
 
+elab "navhavent"  t:term : tactic => do
+  let t_havent  ← elabTerm t none
+  let t_string_fmt ← ppExpr t_havent
+  let t_string := t_string_fmt.pretty
 
+  -- get the list of hyps that are never involved in a proof using t_havent
+  -- delete anything that isn't reachable from any of those
+
+  let toPrune ← withMainContext do
+    let goal ← getMainGoal
+    let lctx ← getLCtx
+    let mainTarget ← goal.getType
+    logInfo m! "main target : {mainTarget}"
+    let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+    let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+    let graph ← toGraph tree emptyGraph []
+    let unreachable_from_t_havent ← bangPruneIrrelevantStr graph t_string
+    let mut toPrune : List FVarId := []
+
+    if unreachable_from_t_havent.length == 0 then
+      let reachable_up ← bangTraverseUp graph t_string
+      let reachable_down ← bangTraverseDown graph t_string
+      let all_reachable := reachable_up ++ reachable_down
+      for n in all_reachable do
+        toPrune := toPrune ++ (← get_node_fvar graph n)
+    else
+      let mut first_go := true
+      for hyp in unreachable_from_t_havent do
+        let unreachable_from_hyp ← bangPruneIrrelevant graph hyp
+        if first_go then
+          first_go := false
+          toPrune := unreachable_from_hyp
+        else
+          -- only keep elements that appear in toPrune and unreachable_from_hyp
+          let mut new_prune : List FVarId := []
+          for n in toPrune do
+            if unreachable_from_hyp.contains n then
+              new_prune := n :: new_prune
+          toPrune := new_prune
+    pure toPrune
+
+    -- add the fvarid of t and of its immediate parents
+
+
+  let mut new_goals : List MVarId := []
+  let goals ← getGoals
+  for goal in goals do
+    let new_goal ← goal.withContext do
+      let mut g := goal
+      for p in toPrune do
+        g ← g.tryClear p
+      pure g
+    new_goals := new_goals ++ [new_goal]
+  setGoals new_goals
 
 
 
