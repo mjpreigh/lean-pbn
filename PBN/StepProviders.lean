@@ -1,0 +1,52 @@
+-- step providers for the Nav-Hav tactics
+
+import Lean
+import Std.Data.HashMap
+import PBN.AndOr
+
+open Std
+open Lean Lean.Elab.Tactic
+open Lean Elab Tactic Meta
+
+
+set_option autoImplicit false
+set_option tactic.hygienic false
+
+elab "navrandom" : tactic => do
+  let goal ← getMainGoal
+  let lctx ← getLCtx
+  let mainTarget ← goal.getType
+  let tree ← buildAndOrTree lctx mainTarget AndORNodeType.ROOT []
+  let emptyGraph : ANDORGraph := { edges := [], nodeMap := {}, root := "", andMap := {}}
+  let graph ← toGraph tree emptyGraph []
+  let nodes := graph.nodeMap.toList.map (λ p => p.1)
+  let mut nodeType := mainTarget
+  let mut node := ""
+  let mut nodeFound := false
+
+  -- get pretty str version of goals
+  let goals ← getGoals
+  let mut pretty_goals : List String := []
+  for goal in goals do
+    let goalexpr ← goal.getType
+    let goalpp := (← ppExpr goalexpr).pretty
+    pretty_goals := goalpp :: pretty_goals
+
+  -- should not be something there is a goal and context for
+  -- should be a prop
+  while !nodeFound do
+    let randomNum ← IO.rand 0 (nodes.length - 1)
+    node := nodes[randomNum]!
+    nodeType := (← get_node_expr graph node)[0]!
+    if (←isProp nodeType) && !(pretty_goals.contains node) then
+      nodeFound := true
+
+  let mut steps := m!"navrandom:\n\napply\"navhave\" to {node} \napply \"navhave!\" to {node}"
+  -- I think can always offer navhave and navhave!
+  -- but navhavent should not always be available
+  -- let's see if there exist any proofs that don't use this node
+  let unreachable_from_node ← bangPruneIrrelevantStr graph node
+  if unreachable_from_node.length > 0 then
+    steps := steps ++ m!"\napply \"navhavent\" to {node}"
+
+  logInfo steps

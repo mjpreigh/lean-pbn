@@ -116,9 +116,17 @@ theorem ao_example (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D
     A :=
   by
     navhave! hB : B end
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
 
     navhave hc : C -n hA end
-
 
 
 
