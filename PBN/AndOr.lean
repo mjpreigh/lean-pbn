@@ -804,16 +804,46 @@ partial def bangTraverseDown (graph : ANDORGraph) (node_string : String) : MetaM
   | none => return []
 
   -- from given node, find all reachable nodes traversing up
+partial def bangTraverseUpAll (graph : ANDORGraph) (node_string : String) : MetaM (List String) := do
+  let nodeMap := graph.nodeMap
+  let node := nodeMap.get? node_string
+  match node with
+  | Node.OR _ c p _ =>
+    let mut reachable : List String := [node_string]
+    -- find all the rules that are parents of this OR node
+    for parent in p do
+      let new_reachable ← bangTraverseUpAll graph parent
+      reachable := reachable ++ new_reachable
+    for child in c do
+      --reachable := child :: reachable
+      let child_reachable ← bangTraverseDown graph child
+      reachable := reachable ++ child_reachable
+    return reachable
+  | Node.AND _ c p _ _ =>
+    let mut reachable : List String := [node_string]
+    -- find all the rules that are parents of this AND node
+    -- also add all children of this rule to reachable
+    for parent in p do
+      let new_reachable ← bangTraverseUpAll graph parent
+      reachable := reachable ++ new_reachable
+    for child in c do
+      --reachable := child :: reachable
+      let child_reachable ← bangTraverseDown graph child
+      reachable := reachable ++ child_reachable
+    return reachable
+  | none => return []
+
 partial def bangTraverseUp (graph : ANDORGraph) (node_string : String) : MetaM (List String) := do
   let nodeMap := graph.nodeMap
   let node := nodeMap.get? node_string
   match node with
-  | Node.OR _ _ p _ =>
+  | Node.OR _ c p _ =>
     let mut reachable : List String := [node_string]
     -- find all the rules that are parents of this OR node
     for parent in p do
       let new_reachable ← bangTraverseUp graph parent
       reachable := reachable ++ new_reachable
+
     return reachable
   | Node.AND _ c p _ _ =>
     let mut reachable : List String := [node_string]
@@ -834,11 +864,13 @@ partial def bangPruneIrrelevant (graph : ANDORGraph) (or_node : String) : MetaM 
   let reachable_up ← bangTraverseUp graph or_node
   let reachable_down ← bangTraverseDown graph or_node
   let all_reachable := reachable_up ++ reachable_down
+  logInfo m! "allreachable : {all_reachable}"
   -- return nodes NOT in all_reachable
   let mut not_reachable : List String := []
   for (node, _) in graph.nodeMap do
     if !(all_reachable.contains node) then
       not_reachable := node :: not_reachable
+  logInfo m!"not reachable : {not_reachable}"
 
   let mut not_reachable_fvarid : List FVarId := []
   let nodeMap := graph.nodeMap
@@ -855,7 +887,7 @@ partial def bangPruneIrrelevantStr (graph : ANDORGraph) (or_node : String) : Met
   let reachable_up ← bangTraverseUp graph or_node
   let reachable_down ← bangTraverseDown graph or_node
   let all_reachable := reachable_up ++ reachable_down
-  logInfo m!"reachable {all_reachable}"
+  --logInfo m!"reachable {all_reachable}"
   -- return nodes NOT in all_reachable
   let mut not_reachable : List String := []
   for (node, _) in graph.nodeMap do
@@ -863,7 +895,7 @@ partial def bangPruneIrrelevantStr (graph : ANDORGraph) (or_node : String) : Met
       not_reachable := node :: not_reachable
   return not_reachable
 
-partial def pruneAllNotBelow (graph : ANDORGraph) (or_node : String) : MetaM (List FVarId) := do
+partial def pruneAllNotBelow (graph : ANDORGraph) (or_node : String) : TacticM (List FVarId) := do
   let reachable_down ← bangTraverseDown graph or_node
   -- return nodes NOT in all_reachable
   let mut not_reachable : List String := []
@@ -873,6 +905,7 @@ partial def pruneAllNotBelow (graph : ANDORGraph) (or_node : String) : MetaM (Li
 
   let mut not_reachable_fvarid : List FVarId := []
   logInfo m!"not reach: {not_reachable}"
+  traverse_graph graph graph.root []
   let nodeMap := graph.nodeMap
   for node_str in not_reachable do
     let node := nodeMap.get? node_str

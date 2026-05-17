@@ -107,44 +107,9 @@ theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (
     --navbottomup
     sorry
 
-  axiom proof_of_C {C} : C
-  axiom proof_of_Z : Z
-  axiom proof_of_X : X
-  axiom proof_of_E : E
 
-theorem ao_example (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → M → A) (h : E → X → Z → B) (i : Z → Y → P → B) :
+
+theorem ao_example (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → A) (h : E → X → B) (i : Z → Y → P → B) :
     A :=
   by
-    navhave! hB : B end
     navrandom
-    navrandom
-    navrandom
-    navrandom
-    navrandom
-    navrandom
-    navrandom
-    navrandom
-    navrandom
-
-    navhave hc : C -n hA end
-
-
-
-
-
-
-theorem ao_example2 (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → M → A) (h : E → X → Z → B) (i : Z → Y → P → B) :
-    A :=
-  by
-    navhave hC : C end -- hC added to main context and new goal C made
-    navhave hB : B end -- hB added to main context, but A is proven so goal disappears, new goal B made
-    . apply proof_of_C -- resolve C
-    . navhave hZ : Z end -- hZ added to context and new goal created
-
-      navhave hY : Y end -- hY added to context and new goal created
-      navhavent Y -- hY, Y : Prop and rule i are removed from contexts, and context for goal Y is removed
-      navhave hX : X end -- hX added to contexts and goal created
-      navhavent E -- hE added to contexts and new goal created
-     -- . apply proof_of_Z -- resolve Z
-     -- . apply proof_of_X -- resolve X
-      --. apply proof_of_E -- resolve E

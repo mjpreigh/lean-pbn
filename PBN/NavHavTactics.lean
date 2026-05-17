@@ -459,6 +459,9 @@ elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
           let mut prune := prune1.1
           let prunestr := prune1.2
           logInfo m!"using: {pretty_new_hyp.pretty}"
+
+          logInfo m!"goal : {←ppExpr (←goal.getType)}"
+          --if goal != main then
           let reachable ← bangPruneIrrelevant graph pretty_new_hyp.pretty
           prune := prune ++ reachable
           --logInfo m!"not reachable: {reachable}"
@@ -519,7 +522,7 @@ elab "navhavent"  t:term : tactic => do
   -- get the list of hyps that are never involved in a proof using t_havent
   -- delete anything that isn't reachable from any of those
 
-  let toPrune ← withMainContext do
+  let mut toPrune ← withMainContext do
     let goal ← getMainGoal
     let lctx ← getLCtx
     let mainTarget ← goal.getType
@@ -531,7 +534,7 @@ elab "navhavent"  t:term : tactic => do
     let mut toPrune : List FVarId := []
 
     if unreachable_from_t_havent.length == 0 then
-      let reachable_up ← bangTraverseUp graph t_string
+      let reachable_up ← bangTraverseUpAll graph t_string
       let reachable_down ← bangTraverseDown graph t_string
       let all_reachable := reachable_up ++ reachable_down
       for n in all_reachable do
@@ -558,12 +561,27 @@ elab "navhavent"  t:term : tactic => do
   let mut new_goals : List MVarId := []
   let goals ← getGoals
   for goal in goals do
+    logInfo m!"at goal : {(←ppExpr (← goal.getType)).pretty}"
     let new_goal ← goal.withContext do
+      let mut del := []
+      let lct ← getLCtx
+      for ldecl in lct do
+        logInfo m!"decl : {(← ppExpr ldecl.toExpr).pretty}"
+        logInfo m! "t : {t_string}"
+        if (← ppExpr ldecl.toExpr).pretty == t_string then
+          logInfo m!"adding to del"
+          del := del ++ [ldecl.fvarId]
+      let pretty_goal := (←ppExpr (← goal.getType)).pretty
+      let mut g2 := []
       let mut g := goal
-      for p in toPrune do
-        g ← g.tryClear p
-      pure g
-    new_goals := new_goals ++ [new_goal]
+      if pretty_goal != t_string then
+        for p in toPrune do
+          g ← g.tryClear p
+        for p in del do
+          g ← g.tryClear p
+        g2 := [g]
+      pure g2
+    new_goals := new_goals ++ new_goal
   setGoals new_goals
 
 
