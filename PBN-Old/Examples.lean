@@ -107,9 +107,43 @@ theorem testt (a b c d e x y z : Prop) (f : b → c → a) (g : c → d → a) (
     --navbottomup
     sorry
 
+  axiom proof_of_C {C} : C
+  axiom proof_of_Z : Z
+  axiom proof_of_X : X
+  axiom proof_of_E : E
 
-
-theorem ao_example (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → A) (h : E → X → B) (i : Z → Y → P → B) :
+theorem ao_example (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → M → A) (h : E → X → Z → B) (i : Z → Y → P → B) :
     A :=
   by
+    navhave! hB : B end
     navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+    navrandom
+
+    navhave hc : C -n hA end
+
+
+
+
+
+
+theorem ao_example2 (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → M → A) (h : E → X → Z → B) (i : Z → Y → P → B) :
+    A :=
+  by
+    navhave hC : C end
+    navhave! hB : B end
+    . apply proof_of_C
+    . navhave! hZ : Z end
+      navhave hY : Y end
+      navhavent Y
+      navhave! hX : X end
+      navhave hE : E end
+      . apply proof_of_Z
+      . apply proof_of_X
+      . apply proof_of_E
