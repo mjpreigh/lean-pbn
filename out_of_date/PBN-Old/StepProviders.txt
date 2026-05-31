@@ -2,7 +2,7 @@
 
 import Lean
 import Std.Data.HashMap
-import PBN.AndOr
+import PBN-Old.AndOr
 
 open Std
 open Lean Lean.Elab.Tactic

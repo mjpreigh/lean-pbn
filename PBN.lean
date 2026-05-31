@@ -4,3 +4,4 @@
 --import PBN.NavHavTactics
 --import PBN.StepProviders
 import PBN.AndORGraph
+import PBN.LabelingTactics
