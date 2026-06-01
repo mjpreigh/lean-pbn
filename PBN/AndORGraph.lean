@@ -192,7 +192,7 @@ partial def printAndOrGraph (graph : ANDORGraph) (curr_node_str : String) (seen_
       for child in c do
         if !seen_and_nodes.contains child then
           printAndOrGraph graph child (child :: seen_and_nodes) seen_or_nodes false
-  | none => throwError "Node does not exist."
+  | none => throwError "Node does not exist. (a)"
 
 elab "printAndOrGraph" : tactic => do
   -- root is main goal of the context
@@ -214,7 +214,6 @@ def isOrProven (graph : ANDORGraph) (or_str : String) : MetaM (List FVarId) := d
 -- also add rule with no args as child of its parent if it is satisfied
 -- keep track of the mvarids that these new rules should have
 partial def findNewAppsTraverse (graph : ANDORGraph) (curr_and_node : String) (curr_mvarid : MVarId) : TacticM (MVarId × ANDORGraph) := do
-  let _ ← printAndOrGraph graph graph.root [] [] true
   let mut all_args_proven := false
   let args ← getNodeChildren graph curr_and_node true
   -- refer to the AND nodes that provide these ORs
@@ -263,3 +262,68 @@ def findNewApps (graph : ANDORGraph) (new_hyp : Expr) (curr_mvarid : MVarId) : T
     for rule in grandparent_rules do
       (new_mvarid, new_graph) ← findNewAppsTraverse new_graph rule new_mvarid
     return new_mvarid
+
+partial def reachableFrom (graph : ANDORGraph) (node_string : String) (and : Bool) (and_reached_so_far : List String) (or_reached_so_far : List String) (up : Bool) : MetaM ((List String) × (List String)) := do
+  let mut node := graph.andNodeMap[node_string]?
+  if !and then
+    node := graph.orNodeMap[node_string]?
+  let mut ands := and_reached_so_far
+  let mut ors := or_reached_so_far
+  match node with
+  | none => return ([], [])--throwError "Node does not exist. (b)"
+  | some n =>
+    match n with
+    | Node.AND e c p _ _ =>
+      -- add this to and reached so far
+      ands := ands ++ [e]
+      if up then
+        -- traverse up
+        if !ors.contains p then
+          (ands, ors) ← reachableFrom graph p false ands ors up
+        for child in c do
+          if !ors.contains child then
+            ors := ors ++ [child]
+      else
+        -- traverse down
+        for child in c do
+          if !ors.contains child then
+            (ands, ors) ← reachableFrom graph child false ands ors up
+    | Node.OR e c p _ =>
+      -- add this to ors reached so far
+      ors := ors ++ [e]
+      if up then
+        -- traverse up
+        for parent in p do
+          if !ands.contains parent then
+            (ands, ors) ← reachableFrom graph parent true ands ors up
+      else
+        -- traverse down
+        for child in c do
+          if !ands.contains child then
+            (ands, ors) ← reachableFrom graph child true ands ors up
+  return (ands, ors)
+
+-- start from the new hypothesis
+def deleteNotReachableFrom (graph : ANDORGraph) (node_expr : Expr) (curr_mvar : MVarId) : TacticM MVarId := do
+  let mut (reachable_ands, reachable_ors) ← reachableFrom graph (← exprToString node_expr) true [] [] true
+  let (reachable_ands2, reachable_ors2) ← reachableFrom graph (← exprToString node_expr) true [] [] false
+  reachable_ands := reachable_ands ++ reachable_ands2
+  reachable_ors := reachable_ors ++ reachable_ors2
+  -- now figure out what is NOT reachable
+  let mut not_reachable_ands : List String := []
+  for (a, _) in graph.andNodeMap do
+    if !reachable_ands.contains a then
+      not_reachable_ands := a :: not_reachable_ands
+  let mut not_reachable_ors : List String := []
+  for (o, _) in graph.orNodeMap do
+    if !reachable_ors.contains o then
+      not_reachable_ors := o :: not_reachable_ors
+  -- delete all not reachable ands from context
+  let mut new_mvar := curr_mvar
+  let mut new_graph := graph
+  for a in not_reachable_ands do
+    new_graph ← constructGraph new_mvar
+    let fvar ← getNodeFvarid new_graph a true
+    new_mvar ← new_mvar.tryClear fvar
+  -- delete props that match not reachable ors from context. How to recognize this?
+  return new_mvar

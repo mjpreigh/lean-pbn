@@ -8,3 +8,8 @@ name = "PBN"
 [[lean_exe]]
 name = "pbn"
 root = "Main"
+
+[[require]]
+name = "proofwidgets"
+scope = "leanprover-community"
+rev = "v0.0.100"

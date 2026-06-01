@@ -40,6 +40,22 @@ def addHypothesis (hyp_name : Ident) (new_hyp_type : Expr): TacticM (List MVarId
   new_goals := new_goals ++ [new_goal.mvarId!]
   return new_goals
 
+  def pruneNotReachable (goals : List MVarId) (e : Expr) : TacticM (List MVarId) := do
+    logInfo m!"here 2"
+    let main := goals[0]!
+    logInfo m!"here 3"
+    let mut new_goals := []
+    for local_goal in goals do
+      let mut new_local_goal := local_goal
+      if local_goal == main then
+        new_local_goal ← local_goal.withContext do
+          let and_or_graph ← constructGraph local_goal
+          let new_goal ← deleteNotReachableFrom and_or_graph e local_goal
+          pure (new_goal)
+      new_goals := new_goals ++ [new_local_goal]
+    logInfo m!"here"
+    return new_goals
+
 -- have a hypothesis named h of type t in this context and add a new goal for t
 -- optionally name anything that is derived along the way
 elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
@@ -54,3 +70,13 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
 elab "navhavent" t:term : tactic => do
   -- delete any hypotheses that can only be used in a proof that also uses t
   let bad_hyp_type ← Term.elabType t
+
+elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
+  -- navhave but delete any hypotheses that cannot be used in a proof that also uses t
+  let new_hyp_type ← Term.elabType t
+  let mut new_goals ← addHypothesis h new_hyp_type
+  -- so delete any hypotheses or props that are not reachable from t
+  logInfo m!"here 1"
+
+  new_goals ← pruneNotReachable new_goals new_hyp_type
+  replaceMainGoal new_goals
