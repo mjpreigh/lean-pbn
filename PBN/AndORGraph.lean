@@ -305,6 +305,10 @@ partial def reachableFrom (graph : ANDORGraph) (node_string : String) (and : Boo
         for parent in p do
           if !ands.contains parent then
             (ands, ors) ← reachableFrom graph parent true ands ors up
+        -- keep 0 child rules
+        for child in c do
+          if !ands.contains child && (← getNodeChildren graph child true).length == 0 then
+            ands := child :: ands
       else
         -- traverse down
         for child in c do
@@ -333,6 +337,7 @@ def deleteNotReachableFrom (graph : ANDORGraph) (node_expr : Expr) (curr_mvar : 
   for a in not_reachable_ands do
     new_graph ← constructGraph new_mvar
     --if (← inGraph new_graph )
+    logInfo m!"delete {a}"
     let fvar ← getNodeFvarid graph a true
     new_mvar ← new_mvar.tryClear fvar
   -- delete props that match not reachable ors from context. How to recognize this?
@@ -372,7 +377,5 @@ def deleteUnusableRulesAndIrrelevantArgs (graph : ANDORGraph) (or_expr : Expr) (
   for rule in delete_rules do
     let fvarid ← getNodeFvarid graph rule true
     new_mvarid ← new_mvarid.tryClear fvarid
-
-  logInfo m!"delete rules : {delete_rules}"
 
   return new_mvarid

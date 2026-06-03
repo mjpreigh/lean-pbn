@@ -8,6 +8,37 @@ theorem testinggg (a b c d u w y z : Prop) (f : b → c → a) (g : c → d → 
 
   navhavent c
 
+theorem ao_example2 (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → D → M → A) (h : E → X → Z → B) (i : Z → Y → P → B) :
+    A :=
+  by
+  navhave hC : C end
+  navhave! hB : B end
+  exact f hB hC
+  . sorry
+  . navhave! hZ : Z end
+    navhave hY : Y end
+    navhavent Y -- hY still in Z context bc not part of and/or graph
+    navhave! hX : X end
+    navhave hE : E end
+    exact h hE hX hZ
+    . sorry
+    . sorry
+    . sorry
+
+  /-
+    navhave hC : C end
+    navhave! hB : B end
+    . apply proof_of_C
+    . navhave! hZ : Z end
+      navhave hY : Y end
+      navhavent Y
+      navhave! hX : X end
+      navhave hE : E end
+      . apply proof_of_Z
+      . apply proof_of_X
+      . apply proof_of_E
+        -/
+
 
 
 

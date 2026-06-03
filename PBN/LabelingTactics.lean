@@ -56,6 +56,8 @@ def addHypothesis (hyp_name : Ident) (new_hyp_type : Expr): TacticM (List MVarId
   def pruneHavent (goals : List MVarId) (e : Expr) : TacticM (List MVarId) := do
     let mut new_goals := []
     for local_goal in goals do
+      if (← local_goal.getType) == e then
+        continue
       let mut new_local_goal ← local_goal.withContext do
           let and_or_graph ← constructGraph local_goal
           let new_goal ← deleteUnusableRulesAndIrrelevantArgs and_or_graph e local_goal
@@ -87,6 +89,7 @@ elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   -- only pruning main context
   let new_hyp_type ← Term.elabType t
   let mut new_goals ← addHypothesis h new_hyp_type
+  logInfo m!"{new_goals}"
   -- so delete any hypotheses or props that are not reachable from t
   new_goals ← pruneNotReachable new_goals new_hyp_type
   replaceMainGoal new_goals
