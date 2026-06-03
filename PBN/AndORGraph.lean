@@ -55,7 +55,7 @@ def getNodeFvarid (graph : ANDORGraph) (node_str : String) (is_and_node : Bool) 
   if !is_and_node then
     node := graph.orNodeMap[node_str]?
   match node with
-  | none => throwError "Node not in graph (3)."
+  | none => throwError m!"Node not in graph : {node_str}."
   | some n =>
     match n with
     | Node.OR _ _ _ f =>
@@ -63,6 +63,14 @@ def getNodeFvarid (graph : ANDORGraph) (node_str : String) (is_and_node : Bool) 
       | none => throwError "Fvarid does not exist."
       | some fv => return fv
     | Node.AND _ _ _ f _ => return f
+
+def inGraph (graph : ANDORGraph) (node_str : String) (is_and_node : Bool) : MetaM Bool := do
+  let mut node := graph.andNodeMap[node_str]?
+  if !is_and_node then
+    node := graph.orNodeMap[node_str]?
+  match node with
+  | none => return false
+  | some _ => return true
 
 def insertEdge (graph : ANDORGraph) : MetaM ANDORGraph := do
   -- make sure both ends of the edge actually refers to nodes in graph
@@ -282,7 +290,8 @@ partial def reachableFrom (graph : ANDORGraph) (node_string : String) (and : Boo
           (ands, ors) ← reachableFrom graph p false ands ors up
         for child in c do
           if !ors.contains child then
-            ors := ors ++ [child]
+            --ors := ors ++ [child]
+            (ands, ors) ← reachableFrom graph child false ands ors false
       else
         -- traverse down
         for child in c do
@@ -323,7 +332,47 @@ def deleteNotReachableFrom (graph : ANDORGraph) (node_expr : Expr) (curr_mvar : 
   let mut new_graph := graph
   for a in not_reachable_ands do
     new_graph ← constructGraph new_mvar
-    let fvar ← getNodeFvarid new_graph a true
+    --if (← inGraph new_graph )
+    let fvar ← getNodeFvarid graph a true
     new_mvar ← new_mvar.tryClear fvar
   -- delete props that match not reachable ors from context. How to recognize this?
   return new_mvar
+
+-- if we delete the given OR node, which rules become unusable?
+def deleteUnusableRulesAndIrrelevantArgs (graph : ANDORGraph) (or_expr : Expr) (curr_mvarid : MVarId) : TacticM MVarId := do
+  let or_str ← exprToString or_expr
+  if !graph.orNodeMap.contains or_str then
+    return curr_mvarid
+  --let delete_ors := []
+  -- add its parents to the list
+
+  let mut delete_rules ← getNodeParents graph or_str false
+  -- now traverse down to all the rules that can be reached below it and add each to the list
+  let mut rules_to_visit ← getNodeChildren graph or_str false
+  let mut seen_ors : List String:= []
+
+  while rules_to_visit.length > 0 do
+    -- pop head off rules to visit
+    let rule := rules_to_visit.head!
+    rules_to_visit := rules_to_visit.tail
+    -- add this rule to rules list
+    delete_rules := rule :: delete_rules
+    -- for each argument, if arg has not been seen, add its children to rules_to_visit
+    let rule_args ← getNodeChildren graph rule true
+
+    for arg in rule_args do
+      if !seen_ors.contains arg then
+        seen_ors := arg :: seen_ors
+        rules_to_visit := rules_to_visit ++ (← getNodeChildren graph arg false)
+
+
+  -- for all arguments of unusable rules, only keep those that are used by some rules not in the list
+  -- delete the args and the rules
+  let mut new_mvarid := curr_mvarid
+  for rule in delete_rules do
+    let fvarid ← getNodeFvarid graph rule true
+    new_mvarid ← new_mvarid.tryClear fvarid
+
+  logInfo m!"delete rules : {delete_rules}"
+
+  return new_mvarid
