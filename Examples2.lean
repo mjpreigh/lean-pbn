@@ -13,14 +13,12 @@ theorem ao_example2 (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → 
   by
   navhave hC : C end
   navhave! hB : B end
-  exact f hB hC
   . sorry
   . navhave! hZ : Z end
     navhave hY : Y end
     navhavent Y -- hY still in Z context bc not part of and/or graph
     navhave! hX : X end
     navhave hE : E end
-    exact h hE hX hZ
     . sorry
     . sorry
     . sorry
@@ -43,6 +41,8 @@ theorem more_nonsense (a b c : Prop) :
   (c → (a → b) → a) → c → b → a := by
   intro f hc hb
   navhave hab : a → b end
+  . intro ha
+    exact hb
 
 
 
@@ -56,12 +56,10 @@ theorem more_nonsense (a b c : Prop) :
   -- later on this would not be included in other new contexts
   -- can a user navhave! something that is already in the context? Like if b is proven and then navhave! b
   -- does this work with and/or/exists/forall ?
-  -- creating a lot of graphs throughout new hypotheses, pruning, etc and traversing these graphs. How concerned should I be right now about speed of this?
   -- navhave! only prunes in the main context?
   -- after main context is prunes the next navhave context will have its reduced hypotheses, but the contexts copied before will have more
   -- does my definition of reachable / could be used in a proof with work?
 
-  -- get rid of the new graph stuff
   -- deleting props
 
   -- when to do what in which contexts
@@ -69,3 +67,5 @@ theorem more_nonsense (a b c : Prop) :
 
 -- how strict should pruning be? In navhavent if there is a rule that could still be applied if stuff is provided but it would not currently be productive for the goal?
 -- how much to take into account that the lean context can have new rules added in the middle of a proof?
+
+-- how much does it matter what is displayed in the context vs the state of the and/or graph? Like when y is leftover from a navhavnet y because it wasn't in the and/or graph?

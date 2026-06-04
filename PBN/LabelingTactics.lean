@@ -66,6 +66,19 @@ def addHypothesis (hyp_name : Ident) (new_hyp_type : Expr): TacticM (List MVarId
 
     return new_goals
 
+  def checkSolved (goals : List MVarId) : TacticM Unit := do
+    for goal in goals do
+      goal.withContext do
+        let main_goal ← goal.getType
+        let lctx ← getLCtx
+        for ldecl in lctx do
+          unless ldecl.isImplementationDetail do
+            let t ← inferType ldecl.toExpr
+            if t == main_goal then
+              let uname := mkIdent (ldecl.userName)
+              evalTactic (← `(tactic| exact $uname))
+    return
+
 -- have a hypothesis named h of type t in this context and add a new goal for t
 -- optionally name anything that is derived along the way
 elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
@@ -76,6 +89,8 @@ elab "navhave" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   let new_hyp_type ← Term.elabType t
   let new_goals ← addHypothesis h new_hyp_type
   replaceMainGoal new_goals
+  checkSolved  new_goals
+
 
 elab "navhavent" t:term : tactic => do
   -- delete any hypotheses that can only be used in a proof that also uses t
@@ -93,3 +108,4 @@ elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   -- so delete any hypotheses or props that are not reachable from t
   new_goals ← pruneNotReachable new_goals new_hyp_type
   replaceMainGoal new_goals
+  checkSolved  new_goals
