@@ -221,7 +221,7 @@ def isOrProven (graph : ANDORGraph) (or_str : String) : MetaM (List FVarId) := d
 -- if all the OR children of this AND are proven, add to map and visit all of its AND grandparents
 -- also add rule with no args as child of its parent if it is satisfied
 -- keep track of the mvarids that these new rules should have
-partial def findNewAppsTraverse (graph : ANDORGraph) (curr_and_node : String) (curr_mvarid : MVarId) : TacticM (MVarId × ANDORGraph) := do
+partial def findNewAppsTraverse (graph : ANDORGraph) (curr_and_node : String) (curr_mvarid : MVarId) : TacticM MVarId := do
   let mut all_args_proven := false
   let args ← getNodeChildren graph curr_and_node true
   -- refer to the AND nodes that provide these ORs
@@ -235,23 +235,24 @@ partial def findNewAppsTraverse (graph : ANDORGraph) (curr_and_node : String) (c
       all_args_proven := false
       break
   if !all_args_proven then
-    return (curr_mvarid, graph)
+    return curr_mvarid
   let curr_fv ← getNodeFvarid graph curr_and_node true
   let rule_parent := (← getNodeParents graph curr_and_node true)[0]!
   if (← isOrProven graph rule_parent).length > 0 then
-    return (curr_mvarid, graph)
+    return curr_mvarid
   let proof := mkAppN (mkFVar curr_fv) (arg_exprs.toArray)
   let type ← inferType proof
   let name ← mkFreshUserName `h
   let mut new_mvarid ← curr_mvarid.assert name type proof
   let (_, new_mvarid') ← new_mvarid.intro name
-  let mut new_graph ← constructGraph new_mvarid'
+  --let mut new_graph ← constructGraph new_mvarid'
   new_mvarid := new_mvarid'
   -- visit every grandparent rule to see if more stuff is provable
-  let grandparent_rules ← getNodeParents new_graph rule_parent false
+  let grandparent_rules ← getNodeParents graph rule_parent false
   for rule in grandparent_rules do
-    (new_mvarid, new_graph) ← findNewAppsTraverse new_graph rule new_mvarid
-  return (new_mvarid, new_graph)
+    --(new_mvarid, new_graph) ← findNewAppsTraverse new_graph rule new_mvarid
+    new_mvarid ← findNewAppsTraverse graph rule new_mvarid
+  return new_mvarid
 
 -- what rule applications can we satifsy now given an additional hypothesis?
 def findNewApps (graph : ANDORGraph) (new_hyp : Expr) (curr_mvarid : MVarId) : TacticM MVarId := do
@@ -265,10 +266,10 @@ def findNewApps (graph : ANDORGraph) (new_hyp : Expr) (curr_mvarid : MVarId) : T
   | some parent_node =>
     let grandparent_rules ← getNodeParents graph (← getNodeExprString parent_node) false
     let mut new_mvarid := curr_mvarid
-    let mut new_graph := graph
+    --let mut new_graph := graph
     -- traverse new graph up from new_and_node and see if any rule applications have all arguments satisfied
     for rule in grandparent_rules do
-      (new_mvarid, new_graph) ← findNewAppsTraverse new_graph rule new_mvarid
+      new_mvarid ← findNewAppsTraverse graph rule new_mvarid
     return new_mvarid
 
 partial def reachableFrom (graph : ANDORGraph) (node_string : String) (and : Bool) (and_reached_so_far : List String) (or_reached_so_far : List String) (up : Bool) : MetaM ((List String) × (List String)) := do
@@ -333,9 +334,9 @@ def deleteNotReachableFrom (graph : ANDORGraph) (node_expr : Expr) (curr_mvar : 
       not_reachable_ors := o :: not_reachable_ors
   -- delete all not reachable ands from context
   let mut new_mvar := curr_mvar
-  let mut new_graph := graph
+  --let mut new_graph := graph
   for a in not_reachable_ands do
-    new_graph ← constructGraph new_mvar
+    --new_graph ← constructGraph new_mvar
     --if (← inGraph new_graph )
     logInfo m!"delete {a}"
     let fvar ← getNodeFvarid graph a true

@@ -39,10 +39,18 @@ theorem ao_example2 (A B C D M E X Z Y P : Prop) (f : B → C → A) (g : C → 
       . apply proof_of_E
         -/
 
+theorem more_nonsense (a b c : Prop) :
+  (c → (a → b) → a) → c → b → a := by
+  intro f hc hb
+  navhave hab : a → b end
 
 
 
 
+
+
+
+-- do every possible application first?
   -- should the stuff that is proven secondarily from navhave be propogated to the other contexts?
   -- should anything be pruned from navhave? Stuff that can only be used to prove the thing that was just"have"d?
   -- later on this would not be included in other new contexts
