@@ -2,6 +2,8 @@
 import Lean
 import Std.Data.HashMap
 import PBN.AndORGraph
+import PBN.SimpleAndOrGraphs
+import Aesop
 
 open Std
 open Lean Lean.Elab.Tactic
@@ -109,3 +111,95 @@ elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   new_goals ← pruneNotReachable new_goals new_hyp_type
   replaceMainGoal new_goals
   checkSolved  new_goals
+
+elab "navaesop" A:str At:term : tactic => do
+
+  -- run aesop
+  let goal ← getMainGoal
+  goal.withContext do
+    let lctx ← getLCtx
+
+    evalTactic (← `(tactic|
+      set_option trace.aesop.tree true in
+      aesop
+    ))
+
+    let mut goals : List (String × String) := []
+    let mut edges : List (String × String) := []
+    let mut and_leaves : List String := []
+    let mut consolidatingGoal := false
+    let mut onGoal := false
+    let mut onRule := false
+    let mut currGoal := ""
+    let mut currID := ""
+
+    let traces ← getTraces
+    let mut stringSet : HashSet String := {}
+
+    for t in traces do
+
+      let tree := toString (← t.msg.format)
+      let lines := tree.split "\n"
+      for line in lines do
+
+        let mut lineStripped := line.replace "✅️" ""
+        lineStripped := lineStripped.replace "❓️" ""
+        lineStripped := lineStripped.replace "🏁" ""
+        lineStripped := lineStripped.replace "❌" ""
+        lineStripped := lineStripped.replace " " ""
+
+        --logInfo "line:"
+        --logInfo m!"{line}"
+
+        if lineStripped.contains "[aesop.tree]"then
+          consolidatingGoal := false
+          --logInfo m!"13 : {lineStripped.toList[13]!}"
+          if lineStripped.toList[13]! == 'G' then
+            -- at a new goal
+            consolidatingGoal := true
+            -- get label
+            currGoal := (lineStripped.splitOn "⋯⊢")[1]!
+            currID := "G" ++ ((lineStripped.splitOn "G")[1]!.splitOn "[")[0]!
+            --logInfo m!"{lineStripped}"
+            --logInfo m! "curr goal : {currGoal}"
+          else if lineStripped.toList[13]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
+            -- at a new rule
+            currID := "R" ++ ((lineStripped.splitOn "R")[1]!.splitOn "[")[0]!
+          else
+          -- look for rule/goal metadata
+            if lineStripped.contains "[aesop.tree]Childgoals:[]" then
+              and_leaves := currID :: and_leaves
+            else if lineStripped.contains "[aesop.tree]Childgoals:[" then
+              -- collect children and add new edges from rule
+              let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
+              for child in children do
+                if child != "" then
+                  edges := (currID, "G" ++ child) :: edges
+            else if lineStripped.contains "[aesop.tree]Childrapps:[" then
+              --logInfo m!"{lineStripped}"
+              --logInfo m! "curr goal : {currGoal}"
+              if currGoal == A.getString then
+                edges := (currID, "axiom") :: edges
+                and_leaves := "axiom" :: and_leaves
+              -- collect children and add new goal node and edges from goal
+              let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
+              for child in children do
+                if child != "" then
+                  edges := (currID, "R" ++ child) :: edges
+              goals := (currID, currGoal) :: goals
+        else if consolidatingGoal == true then
+          -- goal spans multiple lines
+          currGoal := currGoal ++ "\n" ++ lineStripped
+
+    logInfo m!"goals : {goals}"
+    logInfo m!"edges : {edges}"
+
+    let graph : SimpleANDORGraph := { or_nodes := goals , edges := edges}
+    if (← provable graph and_leaves "G0") then
+      logInfo "provable!!"
+      evalTactic (← `(tactic|
+        have h : $At := ?_
+      ))
+      evalTactic (← `(tactic| aesop))
+    else
+      logInfo "not provable"

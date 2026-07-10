@@ -5,3 +5,4 @@
 --import PBN.StepProviders
 import PBN.AndORGraph
 import PBN.LabelingTactics
+import PBN.SimpleAndOrGraphs

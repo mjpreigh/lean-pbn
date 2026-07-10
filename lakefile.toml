@@ -13,3 +13,7 @@ root = "Main"
 name = "proofwidgets"
 scope = "leanprover-community"
 rev = "v0.0.100"
+
+[[require]]
+name = "aesop"
+git = "https://github.com/leanprover-community/aesop"
