@@ -190,11 +190,8 @@ elab "navaesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T![" T!
             -- at a new goal
             consolidatingGoal := true
             -- get label
-            --currGoal := (lineStripped.splitOn "⋯⊢")[1]!
             currGoal := (line.copy.splitOn "⋯ ⊢ ")[1]!
-            --logInfo "line:"
-            --logInfo m!"{line}"
-            --logInfo m!"{currGoal}"
+
             currID := "G" ++ ((lineStripped.splitOn "G")[1]!.splitOn "[")[0]!
 
           else if lineStripped.toList[13]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
@@ -282,7 +279,8 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
     -- keep track of unique AND and OR nodes and edges that are seen
     -- sets for AND/OR nodes, map from each node to a set of its children for edges
 
-    let mut goals : HashMap String String := {}
+    let mut goals : HashMap String String := {} --id to goal
+    let mut goals_backwards : HashMap String (HashSet String) := {} -- goal to id
     let mut rules : HashSet String := {}
     let mut edges : HashMap String (HashSet String) := {}
     let mut unseen : List String:= []
@@ -303,18 +301,29 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
       let tree := toString (← t.msg.format)
       let lines := tree.split "\n"
       for line in lines do
-        let mut lineStripped := line.replace "✅️" ""
-        lineStripped := lineStripped.replace "❓️" ""
-        lineStripped := lineStripped.replace "🏁" ""
-        lineStripped := lineStripped.replace "❌" ""
-        lineStripped := lineStripped.replace " " ""
+        --let mut lineStripped := line.replace "✅️" ""
+        let mut lineStripped := String.ofList (line.toString.toList.filter (fun x => x.isAlphanum || x == '[' || x == ']' || x == '.' || x == '%'  || x == '⋯' || x == '⊢' || x == '|' || x == ':' || x == '(' || x == ')' || x == '?' || x == ','))
+        --logInfo m!"{line}"
+        --logInfo m!"{lineStripped}"
+        --let mut lineStripped := line.replace "{[^a-zA-Z0-9]}" ""
+        --let lscopy := lineStripped
+        --lineStripped := "[aesop.tree]" ++ (lscopy.splitOn "[aesop.tree]")[1]!
+        --lineStripped := lineStripped.replace "❓️" ""
+        --lineStripped := lineStripped.replace "🏁" ""
+        --lineStripped := lineStripped.replace "❌" ""
+        --lineStripped := lineStripped.replace " " ""
+        --lineStripped := lineStripped.replace "\t" ""
+        --lineStripped := lineStripped.replace "\n" ""
+        --let x := lineStripped.toList.filter (fun c => c.toNat < 32 || c.toNat == 127 || (c.toNat >= 128 && c.toNat <= 159))
+
 
         --logInfo "line:"
         --logInfo m!"{line}"
 
         if lineStripped.contains "[aesop.tree]"then
           consolidatingGoal := false
-          if lineStripped.toList[13]! == 'G' then
+          --logInfo m!"{lineStripped} : {lineStripped.toList[13]!}"
+          if lineStripped.toList[12]! == 'G' then
             -- at a new goal
             consolidatingGoal := true
             -- get label
@@ -322,8 +331,14 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
             currGoal := (line.copy.splitOn "⋯ ⊢ ")[1]!
             currID := "G" ++ ((lineStripped.splitOn "G")[1]!.splitOn "[")[0]!
             goals := goals.insert currID currGoal
+            if !goals_backwards.contains currGoal then
+              goals_backwards := goals_backwards.insert currGoal {currID}
+            else
+              let mut set := goals_backwards.get! currGoal
+              set := set.insert currID
+              goals_backwards := goals_backwards.insert currGoal set
 
-          else if lineStripped.toList[13]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
+          else if lineStripped.toList[12]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
             --logInfo m!"{line}"
             -- at a new rule
             currID := "R" ++ ((lineStripped.splitOn "R")[1]!.splitOn "[")[0]!
@@ -340,8 +355,16 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
               for child in children do
                 if child != "" then
                   children_ids := children_ids.insert ("G" ++ child)
-              edges := edges.insert currID children_ids
+              if edges.contains currID then
+                let mut set := edges.get! currID
+                for s in set do
+                  set := set.insert s
+                edges := edges.insert currID set
+              else
+                edges := edges.insert currID children_ids
             else if lineStripped.contains "[aesop.tree]Childrapps:[" then
+              --logInfo m!"{currID}"
+              --logInfo m!"{line}"
 
               -- collect children and add new goal node and edges from goal
               let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
@@ -349,13 +372,31 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
               for child in children do
                 if child != "" then
                   children_ids := children_ids.insert ("R" ++ child)
-              edges := edges.insert currID children_ids
+              if edges.contains currID then
+                let mut set := edges.get! currID
+                for s in set do
+                  set := set.insert s
+                edges := edges.insert currID set
+              else
+                edges := edges.insert currID children_ids
         else if consolidatingGoal == true then
           -- goal spans multiple lines
-          currGoal := currGoal ++ "\n" ++ lineStripped
+          let old_goal := currGoal
+          currGoal := currGoal ++ " " ++ lineStripped
           goals := goals.insert currID currGoal
+          if !goals_backwards.contains old_goal then
+              goals_backwards := goals_backwards.insert currGoal {currID}
+          else
+            let mut set := goals_backwards.get! old_goal
+            set := set.insert currID
+            goals_backwards := goals_backwards.insert currGoal set
 
-
+    /-for goal in goals do
+      logInfo m!"goal: {goal}"
+    for (goal,set) in goals_backwards do
+      logInfo m!"bacakwards goal: {goal}"
+      for s in set do
+        logInfo m!"   {s}"-/
     let mut json_str := "{ \"graph\": {\n  \"metadata\": {\n    \"goal\": \"G0\"\n  },\n  \"nodes\": {"
     for (id,goal) in goals do
       json_str := json_str ++ s!"\n    \"{id}\": \{      \"label\": \"{goal}\",\n      \"metadata\": \{\n        \"kind\": \"OR\"\n      }\n      },"
@@ -373,9 +414,46 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
     json_str := json_str ++ "\n  ]\n} }"
 
     IO.FS.writeFile "aesopjson.json" json_str
+    let mut working_args : Array String := #[]
+    working_args := working_args.push "aesopjson.json"
+
+    -- for each label list
+      -- match goal to goalid(s?)
+      -- add "id label" to working_args
+    for a in A!.getElems do
+      let a_str := (← ppExpr (← Term.elabType a)).pretty
+      let goal_ids := goals_backwards.get! a_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} A!"
+    for a in A.getElems do
+      let a_str := (← ppExpr (← Term.elabType a)).pretty
+      let goal_ids := goals_backwards.get! a_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} A"
+    for t in T.getElems do
+      let t_str := (← ppExpr (← Term.elabType t)).pretty
+      let goal_ids := goals_backwards.get! t_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} T"
+    for t in T!.getElems do
+      let t_str := (← ppExpr (← Term.elabType t)).pretty
+      let goal_ids := goals_backwards.get! t_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} T!"
+    for f in F.getElems do
+      let f_str := (← ppExpr (← Term.elabType f)).pretty
+      let goal_ids := goals_backwards.get! f_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} F"
+    for q? in Q?.getElems do
+      let q?_str := (← ppExpr (← Term.elabType q?)).pretty
+      let goal_ids := goals_backwards.get! q?_str
+      for id in goal_ids do
+        working_args := working_args.push s!"{id} ?"
 
     let output ← IO.Process.output {
       cmd := "./aonav/target/debug/aonav"
-      args := #["aesopjson.json", "G0 T!", "G1 T!"]
+      --args := #["aesopjson.json", "G0 T!", "G1 T!"]
+      args := working_args
     }
     logInfo output.stdout

@@ -76,7 +76,8 @@ theorem and_excluded {P Q R : Prop} (hQ : P → Q) (hR : ¬ P → R) : (P ∧ Q 
 theorem if_iff {B S T s t} : (ifThenElse B S T, s) ⇓ t ↔
     (B s ∧ (S, s) ⇓ t) ∨ (¬ B s ∧ (T, s) ⇓ t) := by
     --navaesop "A!" (BigStep S s t)
-    --navaesop A![(BigStep S s t)] A[] T[] T![] F[] Q?[B s → False, B s, Not (B s)]
+    --navaesop A![] A[] T[] T![] F[] Q?[]
+    aonav_aesop A![] A[] T[] T![] F[] Q?[]
 
   --aesop
   --navaesop
@@ -104,7 +105,7 @@ end BigStep
 
 
 
-theorem testinggg (a b c d u w y z : Prop) (f : b → c → a) (g : c → d → a) (x : w → d) (j : a → u → y):
+/-theorem testinggg (a b c d u w y z : Prop) (f : b → c → a) (g : c → d → a) (x : w → d) (j : a → u → y):
     y :=
   by
   --printAndOrGraph
@@ -125,7 +126,7 @@ theorem ao_exampleee (A B C D M E X Z Y P Q L : Prop) (f : B → C → Q → L �
 theorem ao_example2 (A B C D M E X Z Y P Q L : Prop) (g : C → B → A) (h : X → Z → B) (i : Z → Y → P → B) (j : M → D) (hX : X) (hZ : Z) :
     A :=
   by
-  aonav_aesop A![] A[] T[] T![A] F[] Q?[]
+  --aonav_aesop A![] A[C] T[] T![A] F[] Q?[]
   --have hC : C := ?_
   --aesop
   -- "C" C
@@ -249,3 +250,4 @@ example (x y : BitVec 8)
     (h₂ : y = 3) :
     x = 3 := by
   bv_decide
+-/
