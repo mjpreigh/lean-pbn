@@ -9,7 +9,7 @@ set_option pp.all true
 
 set_option aesop.check.all true
 
-/-abbrev Variable := String
+abbrev Variable := String
 
 def State := Variable → Nat
 
@@ -75,13 +75,14 @@ theorem and_excluded {P Q R : Prop} (hQ : P → Q) (hR : ¬ P → R) : (P ∧ Q 
 
 theorem if_iff {B S T s t} : (ifThenElse B S T, s) ⇓ t ↔
     (B s ∧ (S, s) ⇓ t) ∨ (¬ B s ∧ (T, s) ⇓ t) := by
-    navaesop "A!" (BigStep S s t)
+    --navaesop "A!" (BigStep S s t)
+    --navaesop A![(BigStep S s t)] A[] T[] T![] F[] Q?[B s → False, B s, Not (B s)]
 
   --aesop
   --navaesop
 
 
-end BigStep-/
+end BigStep
 
 
 
@@ -117,16 +118,21 @@ theorem exists_five : ∃ n : Nat, n = 5 := by
 
 theorem ao_exampleee (A B C D M E X Z Y P Q L : Prop) (f : B → C → Q → L → A) (g : C → B → A) (h : E → X → Z → B) (i : Z → Y → P → B) (j : M → D) (hX : X) (hZ : Z) :
     A :=
-  by
+  by sorry
+
 
 
 theorem ao_example2 (A B C D M E X Z Y P Q L : Prop) (g : C → B → A) (h : X → Z → B) (i : Z → Y → P → B) (j : M → D) (hX : X) (hZ : Z) :
     A :=
   by
+  aonav_aesop A![] A[] T[] T![A] F[] Q?[]
   --have hC : C := ?_
   --aesop
-  navaesop "C" C
+  -- "C" C
   --have hM : M := ?_
+  --rust_test
+  --cmd_test
+  --navaesop A![] A[] T[] T![A] F[] Q?[]
 
 
 
@@ -234,3 +240,12 @@ theorem EM_of_DN : DoubleNegation → ExcludedMiddle := by
 
 -- how much does it matter what is displayed in the context vs the state of the and/or graph? Like when y is leftover from a navhavnet y because it wasn't in the and/or graph?
 -- what if context needs to be massaged through intros and such?
+
+example : true := by
+  bv_decide
+
+example (x y : BitVec 8)
+    (h₁ : x = y)
+    (h₂ : y = 3) :
+    x = 3 := by
+  bv_decide

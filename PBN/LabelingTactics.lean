@@ -2,7 +2,8 @@
 import Lean
 import Std.Data.HashMap
 import PBN.AndORGraph
-import PBN.SimpleAndOrGraphs
+import PBN.LabeledAndOrGraph
+import PBN.Providers
 import Aesop
 
 open Std
@@ -106,13 +107,19 @@ elab "navhave!" h:ident ":" t:term "-n"? n:ident* "end": tactic => do
   -- only pruning main context
   let new_hyp_type ← Term.elabType t
   let mut new_goals ← addHypothesis h new_hyp_type
-  logInfo m!"{new_goals}"
+  -- m!"{new_goals}"
   -- so delete any hypotheses or props that are not reachable from t
   new_goals ← pruneNotReachable new_goals new_hyp_type
   replaceMainGoal new_goals
   checkSolved  new_goals
 
-elab "navaesop" A:str At:term : tactic => do
+-- A and A! get added to the context and create new goals
+-- A! and F cause pruning
+elab "navaesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T![" T!:term,* "]" "F[" F:term,* "]" "Q?[" Q?:term,* "]" : tactic => do
+
+  --let HaveStr := (← ppExpr (← Term.elabType HaveTerm)).pretty
+  --let HaventStr := (← ppExpr (← Term.elabType HaveTerm)).pretty
+
 
   -- run aesop
   let goal ← getMainGoal
@@ -124,8 +131,33 @@ elab "navaesop" A:str At:term : tactic => do
       aesop
     ))
 
-    let mut goals : List (String × String) := []
+    let mut labels : HashMap String Label := {}
+    let mut assumed : HashSet String := {}
+
+    for a in A!.getElems do
+      let a_str := (← ppExpr (← Term.elabType a)).pretty
+      assumed := assumed.insert a_str
+      labels := labels.insert a_str (Label.True true true)
+    for a in A.getElems do
+      let a_str := (← ppExpr (← Term.elabType a)).pretty
+      assumed := assumed.insert a_str
+      labels := labels.insert a_str (Label.True false true)
+    for t in T.getElems do
+      let t_str := (← ppExpr (← Term.elabType t)).pretty
+      labels := labels.insert t_str (Label.True false false)
+    for t in T!.getElems do
+      let t_str := (← ppExpr (← Term.elabType t)).pretty
+      labels := labels.insert t_str (Label.True false true)
+    for f in F.getElems do
+      let f_str := (← ppExpr (← Term.elabType f)).pretty
+      labels := labels.insert f_str Label.False
+    for q? in Q?.getElems do
+      let q?_str := (← ppExpr (← Term.elabType q?)).pretty
+      labels := labels.insert q?_str Label.Unknown
+
+    let mut goals : HashMap String String := {}
     let mut edges : List (String × String) := []
+    let mut unseen : List String:= []
     let mut and_leaves : List String := []
     let mut consolidatingGoal := false
     let mut onGoal := false
@@ -136,12 +168,13 @@ elab "navaesop" A:str At:term : tactic => do
     let traces ← getTraces
     let mut stringSet : HashSet String := {}
 
+    -- make AND-OR graph
+
     for t in traces do
 
       let tree := toString (← t.msg.format)
       let lines := tree.split "\n"
       for line in lines do
-
         let mut lineStripped := line.replace "✅️" ""
         lineStripped := lineStripped.replace "❓️" ""
         lineStripped := lineStripped.replace "🏁" ""
@@ -153,15 +186,17 @@ elab "navaesop" A:str At:term : tactic => do
 
         if lineStripped.contains "[aesop.tree]"then
           consolidatingGoal := false
-          --logInfo m!"13 : {lineStripped.toList[13]!}"
           if lineStripped.toList[13]! == 'G' then
             -- at a new goal
             consolidatingGoal := true
             -- get label
-            currGoal := (lineStripped.splitOn "⋯⊢")[1]!
+            --currGoal := (lineStripped.splitOn "⋯⊢")[1]!
+            currGoal := (line.copy.splitOn "⋯ ⊢ ")[1]!
+            --logInfo "line:"
+            --logInfo m!"{line}"
+            --logInfo m!"{currGoal}"
             currID := "G" ++ ((lineStripped.splitOn "G")[1]!.splitOn "[")[0]!
-            --logInfo m!"{lineStripped}"
-            --logInfo m! "curr goal : {currGoal}"
+
           else if lineStripped.toList[13]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
             -- at a new rule
             currID := "R" ++ ((lineStripped.splitOn "R")[1]!.splitOn "[")[0]!
@@ -176,30 +211,171 @@ elab "navaesop" A:str At:term : tactic => do
                 if child != "" then
                   edges := (currID, "G" ++ child) :: edges
             else if lineStripped.contains "[aesop.tree]Childrapps:[" then
-              --logInfo m!"{lineStripped}"
-              --logInfo m! "curr goal : {currGoal}"
-              if currGoal == A.getString then
+
+              --if currGoal == HaveStr then
+              if assumed.contains currGoal then
                 edges := (currID, "axiom") :: edges
                 and_leaves := "axiom" :: and_leaves
+              if !(labels.contains currGoal) then
+                unseen := currID :: unseen
               -- collect children and add new goal node and edges from goal
               let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
               for child in children do
                 if child != "" then
                   edges := (currID, "R" ++ child) :: edges
-              goals := (currID, currGoal) :: goals
+              goals := goals.insert currID currGoal
         else if consolidatingGoal == true then
           -- goal spans multiple lines
           currGoal := currGoal ++ "\n" ++ lineStripped
 
-    logInfo m!"goals : {goals}"
-    logInfo m!"edges : {edges}"
+    --logInfo m!"goals : {goals}"
+    --logInfo m!"edges : {edges}"
 
-    let graph : SimpleANDORGraph := { or_nodes := goals , edges := edges}
+    let graph : LabeledANDORGraph := { or_nodes := goals , edges := edges, labels := labels, assume := [], bang := [], false_ := [], unseen := unseen}
     if (← provable graph and_leaves "G0") then
       logInfo "provable!!"
-      evalTactic (← `(tactic|
-        have h : $At := ?_
-      ))
+      for a in A.getElems do
+        evalTactic (← `(tactic|
+          have h : $a := ?_
+        ))
+      for a in A!.getElems do
+        evalTactic (← `(tactic|
+          have h : $a := ?_
+        ))
       evalTactic (← `(tactic| aesop))
     else
+      -- offer steps based on step provider
       logInfo "not provable"
+      Random graph
+
+
+elab "rust_test" : tactic => do
+  logInfo m!"before"
+  let output ← IO.Process.output {
+    cmd := "./rustlib/target/debug/rustlib"
+    args := #["A", "B", "C", "", "A", "C", "D"]
+  }
+  logInfo output.stdout
+  logInfo m!"after"
+
+elab "cmd_test" : tactic => do
+  logInfo m!"before"
+  let output ← IO.Process.output {
+    cmd := "bash"
+    args := #["-c", "echo hello > hello.txt"]
+  }
+  logInfo output.stdout
+  logInfo m!"after"
+
+elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T![" T!:term,* "]" "F[" F:term,* "]" "Q?[" Q?:term,* "]" : tactic => do
+    -- run aesop
+  let goal ← getMainGoal
+  goal.withContext do
+    let lctx ← getLCtx
+
+    evalTactic (← `(tactic|
+      set_option trace.aesop.tree true in
+      aesop
+    ))
+
+    -- construct a json style string and write to a file
+    -- keep track of unique AND and OR nodes and edges that are seen
+    -- sets for AND/OR nodes, map from each node to a set of its children for edges
+
+    let mut goals : HashMap String String := {}
+    let mut rules : HashSet String := {}
+    let mut edges : HashMap String (HashSet String) := {}
+    let mut unseen : List String:= []
+    let mut and_leaves : List String := []
+    let mut consolidatingGoal := false
+    let mut onGoal := false
+    let mut onRule := false
+    let mut currGoal := ""
+    let mut currID := ""
+
+    let traces ← getTraces
+    let mut stringSet : HashSet String := {}
+
+    -- make AND-OR graph
+
+    for t in traces do
+
+      let tree := toString (← t.msg.format)
+      let lines := tree.split "\n"
+      for line in lines do
+        let mut lineStripped := line.replace "✅️" ""
+        lineStripped := lineStripped.replace "❓️" ""
+        lineStripped := lineStripped.replace "🏁" ""
+        lineStripped := lineStripped.replace "❌" ""
+        lineStripped := lineStripped.replace " " ""
+
+        --logInfo "line:"
+        --logInfo m!"{line}"
+
+        if lineStripped.contains "[aesop.tree]"then
+          consolidatingGoal := false
+          if lineStripped.toList[13]! == 'G' then
+            -- at a new goal
+            consolidatingGoal := true
+            -- get label
+            --currGoal := (lineStripped.splitOn "⋯⊢")[1]!
+            currGoal := (line.copy.splitOn "⋯ ⊢ ")[1]!
+            currID := "G" ++ ((lineStripped.splitOn "G")[1]!.splitOn "[")[0]!
+            goals := goals.insert currID currGoal
+
+          else if lineStripped.toList[13]! == 'R' && !lineStripped.contains "[aesop.tree]Rule:" then
+            --logInfo m!"{line}"
+            -- at a new rule
+            currID := "R" ++ ((lineStripped.splitOn "R")[1]!.splitOn "[")[0]!
+            rules := rules.insert currID
+          else
+          -- look for rule/goal metadata
+            if lineStripped.contains "[aesop.tree]Childgoals:[]" then
+              and_leaves := currID :: and_leaves
+            else if lineStripped.contains "[aesop.tree]Childgoals:[" then
+              -- collect children and add new edges from rule
+              let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
+              for child in children do
+              let mut children_ids : HashSet String := {}
+              for child in children do
+                if child != "" then
+                  children_ids := children_ids.insert ("G" ++ child)
+              edges := edges.insert currID children_ids
+            else if lineStripped.contains "[aesop.tree]Childrapps:[" then
+
+              -- collect children and add new goal node and edges from goal
+              let children := (((lineStripped.splitOn "[")[2]!.replace "]" "").split ",").toList
+              let mut children_ids : HashSet String := {}
+              for child in children do
+                if child != "" then
+                  children_ids := children_ids.insert ("R" ++ child)
+              edges := edges.insert currID children_ids
+        else if consolidatingGoal == true then
+          -- goal spans multiple lines
+          currGoal := currGoal ++ "\n" ++ lineStripped
+          goals := goals.insert currID currGoal
+
+
+    let mut json_str := "{ \"graph\": {\n  \"metadata\": {\n    \"goal\": \"G0\"\n  },\n  \"nodes\": {"
+    for (id,goal) in goals do
+      json_str := json_str ++ s!"\n    \"{id}\": \{      \"label\": \"{goal}\",\n      \"metadata\": \{\n        \"kind\": \"OR\"\n      }\n      },"
+    for id in rules do
+      json_str := json_str ++ s!"\n    \"{id}\": \{\n      \"metadata\": \{\n        \"kind\": \"AND\"\n      }\n      },"
+    -- cut off the last comma
+    json_str := (json_str.dropEnd 1).copy
+    json_str := json_str ++ s!"\n  },"
+    json_str := json_str ++ "\n  \"edges\": ["
+    for (parent, children) in edges do
+      for child in children do
+        json_str := json_str ++ s!"\n    \{\n      \"source\": \"{parent}\",\n      \"target\": \"{child}\"\n    },"
+    -- cut off the last comma
+    json_str := (json_str.dropEnd 1).copy
+    json_str := json_str ++ "\n  ]\n} }"
+
+    IO.FS.writeFile "aesopjson.json" json_str
+
+    let output ← IO.Process.output {
+      cmd := "./aonav/target/debug/aonav"
+      args := #["aesopjson.json", "G0 T!", "G1 T!"]
+    }
+    logInfo output.stdout

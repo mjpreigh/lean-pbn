@@ -8,6 +8,13 @@ name = "PBN"
 [[lean_exe]]
 name = "pbn"
 root = "Main"
+moreLinkArgs = [
+  "-L./rustlib/target/debug",
+  "-lrustlib",
+  "-Wl,-rpath,@loader_path/../../../../rustlib/target/debug/deps",
+  "-L./aonav/target/debug",
+  "-Wl,-rpath,@loader_path/../../../../aonav/target/debug/deps"
+]
 
 [[require]]
 name = "proofwidgets"
