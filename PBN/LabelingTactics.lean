@@ -264,7 +264,10 @@ elab "cmd_test" : tactic => do
   logInfo output.stdout
   logInfo m!"after"
 
-elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T![" T!:term,* "]" "F[" F:term,* "]" "Q?[" Q?:term,* "]" : tactic => do
+-- A and A! take terms
+-- rest take strings
+-- if it has a projection it probably can't be A or A!
+elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" T!:str,* "]" "F[" F:str,* "]" "Q?[" Q?:str,* "]" : tactic => do
     -- run aesop
   let goal ← getMainGoal
   goal.withContext do
@@ -431,23 +434,20 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:term,* "]" "T!["
       for id in goal_ids do
         working_args := working_args.push s!"{id} A"
     for t in T.getElems do
-      let t_str := (← ppExpr (← Term.elabType t)).pretty
-      let goal_ids := goals_backwards.get! t_str
+      --let t_str := (← ppExpr (← Term.elabType t)).pretty
+      let goal_ids := goals_backwards.get! t.getString
       for id in goal_ids do
         working_args := working_args.push s!"{id} T"
     for t in T!.getElems do
-      let t_str := (← ppExpr (← Term.elabType t)).pretty
-      let goal_ids := goals_backwards.get! t_str
+      let goal_ids := goals_backwards.get! t.getString
       for id in goal_ids do
         working_args := working_args.push s!"{id} T!"
     for f in F.getElems do
-      let f_str := (← ppExpr (← Term.elabType f)).pretty
-      let goal_ids := goals_backwards.get! f_str
+      let goal_ids := goals_backwards.get! f.getString
       for id in goal_ids do
         working_args := working_args.push s!"{id} F"
     for q? in Q?.getElems do
-      let q?_str := (← ppExpr (← Term.elabType q?)).pretty
-      let goal_ids := goals_backwards.get! q?_str
+      let goal_ids := goals_backwards.get! q?.getString
       for id in goal_ids do
         working_args := working_args.push s!"{id} ?"
 

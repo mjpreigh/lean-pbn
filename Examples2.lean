@@ -73,6 +73,8 @@ theorem cases_if_of_false {B S T s t} (hcond : ¬ B s) : (ifThenElse B S T, s) �
 theorem and_excluded {P Q R : Prop} (hQ : P → Q) (hR : ¬ P → R) : (P ∧ Q ∨ ¬ P ∧ R) := by
   by_cases h : P <;> aesop
 
+set_option diagnostics true
+
 theorem if_iff {B S T s t} : (ifThenElse B S T, s) ⇓ t ↔
     (B s ∧ (S, s) ⇓ t) ∨ (¬ B s ∧ (T, s) ⇓ t) := by
     --navaesop "A!" (BigStep S s t)
