@@ -267,7 +267,9 @@ elab "cmd_test" : tactic => do
 -- A and A! take terms
 -- rest take strings
 -- if it has a projection it probably can't be A or A!
-elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" T!:str,* "]" "F[" F:str,* "]" "Q?[" Q?:str,* "]" : tactic => do
+-- merge OR nodes with same goal but different ids into one (children)
+elab "aonav_aesop" provider:str "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" T!:str,* "]" "F[" F:str,* "]" "Q?[" Q?:str,* "]" : tactic => do
+
     -- run aesop
   let goal ← getMainGoal
   goal.withContext do
@@ -294,7 +296,7 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" 
     let mut currGoal := ""
     let mut currID := ""
 
-    let traces ← getTraces
+    let mut traces ← getTraces
     let mut stringSet : HashSet String := {}
 
     -- make AND-OR graph
@@ -419,6 +421,7 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" 
     IO.FS.writeFile "aesopjson.json" json_str
     let mut working_args : Array String := #[]
     working_args := working_args.push "aesopjson.json"
+    working_args := working_args.push provider.getString
 
     -- for each label list
       -- match goal to goalid(s?)
@@ -456,4 +459,19 @@ elab "aonav_aesop" "A![" A!:term,* "]" "A[" A:term,* "]" "T[" T:str,* "]" "T![" 
       --args := #["aesopjson.json", "G0 T!", "G1 T!"]
       args := working_args
     }
-    logInfo output.stdout
+    let res := output.stdout
+    logInfo res
+
+    if res == s!"Valid!\n" then
+      logInfo res
+      let main_goal ← getMainGoal
+      main_goal.withContext do
+        for a in A.getElems do
+          evalTactic (← `(tactic|
+            have h : $a := ?_
+          ))
+        for a in A!.getElems do
+          evalTactic (← `(tactic|
+            have h : $a := ?_
+          ))
+        evalTactic (← `(tactic| aesop))

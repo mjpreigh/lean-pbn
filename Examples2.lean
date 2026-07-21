@@ -77,9 +77,8 @@ set_option diagnostics true
 
 theorem if_iff {B S T s t} : (ifThenElse B S T, s) ⇓ t ↔
     (B s ∧ (S, s) ⇓ t) ∨ (¬ B s ∧ (T, s) ⇓ t) := by
-    --navaesop "A!" (BigStep S s t)
-    --navaesop A![] A[] T[] T![] F[] Q?[]
-    aonav_aesop A![] A[] T[] T![] F[] Q?[]
+    aonav_aesop "CutRel" A![] A[] T[] T!["Iff (BigStep (Stmt.ifThenElse B S T) s t) (Or(And(Bs)(BigStepSst))(And(Not(Bs))(BigStepTst)))", "And (B s) (BigStep S s t)"] F[] Q?["BigStep (Stmt.ifThenElse B S T) s t → Or(And(Bs)(BigStepSst))(And(Not(Bs))(BigStepTst))", "And (Not (B s)) (BigStep T s t)"]
+    --aonav_aesop "Cut" A![] A[B s, BigStep S s t] T["And (B s) (BigStep S s t)"] T!["Iff (BigStep (Stmt.ifThenElse B S T) s t) (Or(And(Bs)(BigStepSst))(And(Not(Bs))(BigStepTst)))", "And (Not (B s)) (BigStep T s t)"] F[] Q?["BigStep (Stmt.ifThenElse B S T) s t → Or(And(Bs)(BigStepSst))(And(Not(Bs))(BigStepTst))"]
 
   --aesop
   --navaesop
